@@ -34,8 +34,9 @@ lang: pt-BR
 link-citations: yes
 cap-location: top
 ---
-
+```{=tex}
 \oneHalfIndent
+```
 
 # Introdução
 
