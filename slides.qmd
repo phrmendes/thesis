@@ -7,6 +7,7 @@ reference-section-title: References
 lang: pt-BR
 nocite: "@*"
 format: revealjs
+bibliography: references.bib
 ---
 
 # Lorem ipsum dolor sit amet

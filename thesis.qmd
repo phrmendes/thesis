@@ -3,7 +3,7 @@ format: pdf
 lang: pt-BR
 nocite: "@*"
 documentclass: scrreprt
-bibliography: ./quarto/references.bib
+bibliography: references.bib
 header-includes:
     - \addtokomafont{chapter}{\Large}
 ---

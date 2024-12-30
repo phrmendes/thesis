@@ -2,7 +2,8 @@ format:
   pdf:
     cap-location: top
     colorlinks: true
-    csl: ./quarto/abnt.csl
+    csl: abnt.csl
+    bibliography: references.bib
     fig-pos: "H"
     fontsize: 12pt
     geometry:
