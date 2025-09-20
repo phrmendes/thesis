@@ -48,8 +48,6 @@
             LD_LIBRARY_PATH = lib.makeLibraryPath [
               cudaPackages.cudatoolkit
               cudaPackages.cudnn
-              linuxPackages.nvidia_x11
-              stdenv.cc.cc
               stdenv.cc.cc.lib
               zlib
             ];

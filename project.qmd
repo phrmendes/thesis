@@ -7,7 +7,6 @@ documentclass: scrartcl
 format: pdf
 nocite: "@*"
 lang: pt-BR
-bibliography: references.bib
 header-includes:
     - \addtokomafont{title}{\let\huge\LARGE}
 ---
