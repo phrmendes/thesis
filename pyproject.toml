@@ -1,49 +1,65 @@
 [project]
 name = "thesis"
 version = "1.0.0"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 description = "My economics bachelor's thesis (UFABC)"
 dependencies = [
-    "httpx>=0.28.0",
-    "keras>=3.7.0",
-    "mapie>=0.9.1",
-    "matplotlib>=3.9.3",
-    "pandas>=2.2.3",
-    "scikit-learn>=1.5.2",
-    "statsmodels>=0.14.4",
+  "altair>=6.2.2",
+  "httpx>=0.28.1",
+  "mapie>=1.4.1",
+  "neuralforecast>=3.2.0",
+  "numpy>=2.4.6",
+  "polars>=1.42.1",
+  "scipy>=1.18.0",
+  "sktime>=1.0.1",
+  "statsforecast>=2.0.1",
+  "xgboost>=3.3.0",
 ]
 
 [tool.basedpyright]
-typeCheckingMode = "standard"
+typeCheckingMode = "recommended"
 useLibraryCodeForTypes = true
 reportAttributeAccessIssue = false
 venvPath = "."
 venv = ".venv"
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py314"
 line-length = 120
 indent-width = 4
 
 [tool.ruff.lint]
+fixable = ["ALL"]
 select = [
   "A",
-  "ARG",
-  "ASYNC",
   "B",
   "C4",
   "DTZ",
   "E",
+  "ERA",
   "F",
+  "FBT",
+  "FURB",
   "I",
+  "ICN",
   "N",
+  "NPY",
+  "PERF",
   "PL",
-  "PT",
   "PTH",
+  "RET",
   "RUF",
+  "SIM",
+  "T10",
+  "T20",
+  "TC",
+  "TRY",
+  "UP",
   "W",
 ]
-fixable = ["ALL"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["thesis"]
 
 [tool.ruff.format]
 quote-style = "double"

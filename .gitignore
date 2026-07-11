@@ -1,5 +1,2 @@
 .venv
-.direnv
-**/*.quarto
-
-/.quarto/
+.devenv
