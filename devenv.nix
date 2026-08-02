@@ -27,6 +27,7 @@ in
     tex
     liberation_ttf
     gfortran
+    zlib
   ];
 
   tasks = {

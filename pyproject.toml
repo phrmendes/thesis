@@ -5,23 +5,37 @@ requires-python = ">=3.14"
 description = "My economics bachelor's thesis (UFABC)"
 dependencies = [
   "altair>=6.2.2",
+  "duckdb>=1.2.0",
   "httpx>=0.28.1",
+  "loguru>=0.7",
   "mapie>=1.4.1",
-  "neuralforecast>=3.2.0",
   "numpy>=2.4.6",
   "polars>=1.42.1",
+  "pydantic>=2",
   "scipy>=1.18.0",
   "sktime>=1.0.1",
   "statsforecast>=2.0.1",
+  "typer>=0.27.0",
+  "uvloop>=0.22.1",
   "xgboost>=3.3.0",
 ]
+
+[project.scripts]
+thesis = "cli.main:app"
+
+[tool.uv]
+package = true
 
 [tool.basedpyright]
 typeCheckingMode = "recommended"
 useLibraryCodeForTypes = true
 reportAttributeAccessIssue = false
-venvPath = "."
-venv = ".venv"
+reportUnusedCallResult = false
+venvPath = ".devenv/state"
+venv = "venv"
+
+[tool.setuptools.packages.find]
+include = ["cli*"]
 
 [tool.ruff]
 target-version = "py314"
@@ -32,19 +46,21 @@ indent-width = 4
 fixable = ["ALL"]
 select = [
   "A",
+  "ANN",
+  "ARG",
   "B",
   "C4",
-  "DTZ",
   "E",
   "ERA",
   "F",
   "FBT",
+  "FLY",
   "FURB",
   "I",
-  "ICN",
   "N",
   "NPY",
   "PERF",
+  "PGH",
   "PL",
   "PTH",
   "RET",
@@ -52,7 +68,6 @@ select = [
   "SIM",
   "T10",
   "T20",
-  "TC",
   "TRY",
   "UP",
   "W",
@@ -63,3 +78,6 @@ known-first-party = ["thesis"]
 
 [tool.ruff.format]
 quote-style = "double"
+
+[dependency-groups]
+dev = ["ty>=0.0.65"]
