@@ -1,10 +1,15 @@
 from typing import ClassVar
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class BaseModelConfig(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def null_string_to_none(cls, value: object) -> object:
+        return value if value != "null" else None
 
 
 class SteamData(BaseModelConfig):
@@ -23,12 +28,21 @@ class BuffHighestOrder(BaseModelConfig):
 
 
 class BuffData(BaseModelConfig):
-    starting_at: BuffStartingAt | str | None = None
-    highest_order: BuffHighestOrder | str | None = None
+    starting_at: BuffStartingAt | None = None
+    highest_order: BuffHighestOrder | None = None
 
 
 class PriceData(BaseModelConfig):
     price: float | None = None
+
+
+class RarityData(BaseModelConfig):
+    name: str | None = None
+
+
+class ItemData(BaseModelConfig):
+    market_hash_name: str | None = None
+    rarity: RarityData | None = None
 
 
 class ItemPrices(BaseModelConfig):

@@ -1,0 +1,16 @@
+SELECT
+    EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE
+            table_schema = 'main'
+            AND table_name = 'skins'
+    )
+    OR EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE
+            table_schema = 'main'
+            AND table_name = 'prices'
+            AND column_name = 'rarity'
+    ) AS has_item_metadata

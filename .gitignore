@@ -1,5 +1,6 @@
 .venv
 .devenv
-data/
 *.egg-info
 __pycache__
+.pre-commit-config.yaml
+files/
