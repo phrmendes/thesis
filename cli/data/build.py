@@ -29,7 +29,7 @@ def build(
     items_path = items_path or Path(DEFAULT_ITEMS_PATH)
     sql_kwargs = {"data_dir": str(data_dir), "items_path": str(items_path)}
     build_sql = Template((SQL_DIR / "build.sql").read_text()).substitute(**sql_kwargs)
-    skins_sql = Template((SQL_DIR / "skins.sql").read_text()).substitute(**sql_kwargs)
+    items_sql = Template((SQL_DIR / "items.sql").read_text()).substitute(**sql_kwargs)
     count_parquet = Template((SQL_DIR / "count_parquet.sql").read_text()).substitute(**sql_kwargs)
     count_prices = (SQL_DIR / "count_prices.sql").read_text()
 
@@ -37,7 +37,7 @@ def build(
         conn.execute(f"SET threads = {threads}")
         expected = cast(int, conn.sql(count_parquet).pl().item())
         conn.execute(build_sql)
-        conn.execute(skins_sql)
+        conn.execute(items_sql)
         actual = cast(int, conn.sql(count_prices).pl().item())
 
         if actual != expected:

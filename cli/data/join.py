@@ -17,7 +17,7 @@ def join(db_path: Path | None = None) -> int:
         try:
             conn.execute(query)
             conn.execute("DROP TABLE prices")
-            conn.execute("DROP TABLE skins")
+            conn.execute("DROP TABLE items")
             conn.execute("ALTER TABLE prices_joined RENAME TO prices")
             rows = cast(int, conn.sql("SELECT count(*) FROM prices").pl().item())
             conn.execute("COMMIT")

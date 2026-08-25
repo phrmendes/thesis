@@ -13,23 +13,15 @@ class BaseModelConfig(BaseModel):
 
 
 class SteamData(BaseModelConfig):
-    last_24h: float | None = None
-    last_7d: float | None = None
     last_30d: float | None = None
-    last_90d: float | None = None
 
 
 class BuffStartingAt(BaseModelConfig):
     price: float | None = None
 
 
-class BuffHighestOrder(BaseModelConfig):
-    price: float | None = None
-
-
 class BuffData(BaseModelConfig):
     starting_at: BuffStartingAt | None = None
-    highest_order: BuffHighestOrder | None = None
 
 
 class PriceData(BaseModelConfig):

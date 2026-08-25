@@ -32,7 +32,6 @@ class FetchStatus(Enum):
 class PriceRow(TypedDict):
     date: date
     item_hash_name: str
-    source_data: dict[str, object]
     steam_price: float | None
     buff163_price: float | None
     csgotrader_price: float | None
@@ -78,8 +77,10 @@ def has_item_metadata(db_path: Path) -> bool:
 async def request_snapshot(client: AsyncClient, url: str, sem: Semaphore) -> Response:
     async with sem:
         response = await client.get(url)
+
         if response.status_code == HTTPStatus.TOO_MANY_REQUESTS or response.is_server_error:
             response.raise_for_status()
+
         return response
 
 
@@ -88,7 +89,6 @@ def extract_prices(name: str, item: ItemPrices, day: date) -> PriceRow:
     return {
         "date": day,
         "item_hash_name": name,
-        "source_data": item.model_dump(),
         "steam_price": item.steam.last_30d if item.steam else None,
         "buff163_price": (item.buff163.starting_at.price if item.buff163 and item.buff163.starting_at else None),
         "csgotrader_price": item.csgotrader.price if item.csgotrader else None,

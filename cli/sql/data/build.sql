@@ -13,12 +13,14 @@ CREATE OR REPLACE MACRO normalize_skin_name(item_name) AS (
 CREATE OR REPLACE TABLE prices AS
 SELECT
     date,
-    sha256(normalize_skin_name(item_hash_name)) AS id,
-    normalize_skin_name(item_hash_name) AS item_name,
-    source_data,
-    CASE WHEN steam_price > 0 THEN steam_price END AS steam_price,
-    CASE WHEN buff163_price > 0 THEN buff163_price END AS buff163_price,
-    CASE WHEN csgotrader_price > 0 THEN csgotrader_price END AS csgotrader_price
+    sha256(item_hash_name) AS id,
+    item_hash_name AS item_name,
+    normalize_skin_name(item_hash_name) AS family_name,
+    struct_pack(
+        steam := steam_price,
+        buff163 := buff163_price,
+        csgotrader := csgotrader_price
+    ) AS prices
 FROM read_parquet('${data_dir}/*.parquet')
 WHERE
     item_hash_name IS NOT NULL
@@ -26,3 +28,4 @@ WHERE
 ORDER BY item_hash_name, date;
 
 ALTER TABLE prices RENAME COLUMN item_name TO name;
+ALTER TABLE prices RENAME COLUMN family_name TO family;

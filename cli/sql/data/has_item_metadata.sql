@@ -4,7 +4,7 @@ SELECT
         FROM information_schema.tables
         WHERE
             table_schema = 'main'
-            AND table_name = 'skins'
+            AND table_name = 'items'
     )
     OR EXISTS (
         SELECT 1
