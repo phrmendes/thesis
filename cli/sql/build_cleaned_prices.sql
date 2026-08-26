@@ -2,13 +2,17 @@
 -- mean csgotrader price of at least 1 and at least 500 positive observations.
 -- It keeps weekly closing prices and adds the weekly between-week return, a
 -- net weekly roi after the sale fee, and per-week sharpe and sortino based on
--- within-week daily return volatility. It drops each asset's first week, whose
--- weekly return is NULL. The model and strategy commands consume this table.
+-- within-week daily return volatility. It drops spurious daily prices outside a
+-- floor of 5% and a ceiling of 20x of each asset's median price. It drops each
+-- asset's first week, whose weekly return is NULL. The model and strategy
+-- commands consume this table.
 
 CREATE SCHEMA IF NOT EXISTS cleaned;
 
 CREATE OR REPLACE MACRO sale_net_factor() AS (0.9);
 CREATE OR REPLACE MACRO return_cap() AS (1.0);
+CREATE OR REPLACE MACRO price_floor_factor() AS (0.05);
+CREATE OR REPLACE MACRO price_ceiling_factor() AS (20.0);
 
 CREATE OR REPLACE TABLE cleaned.prices AS
 WITH selected_assets AS (
@@ -22,6 +26,26 @@ WITH selected_assets AS (
     HAVING
         avg(prices['csgotrader']) FILTER (WHERE prices['csgotrader'] > 0) >= 1.0
         AND count(*) FILTER (WHERE prices['csgotrader'] > 0) >= 500
+),
+
+asset_reference_prices AS (
+    SELECT
+        asset_prices.id,
+        median(asset_prices.csgotrader) AS reference_price
+    FROM (
+        SELECT
+            raw_prices.id,
+            raw_prices.prices['csgotrader'] AS csgotrader
+        FROM raw.prices AS raw_prices
+        WHERE
+            raw_prices.prices['csgotrader'] > 0
+            AND EXISTS (
+                SELECT 1
+                FROM selected_assets
+                WHERE selected_assets.id = raw_prices.id
+            )
+    ) AS asset_prices
+    GROUP BY asset_prices.id
 ),
 
 weekly_horizon AS (
@@ -38,8 +62,14 @@ observed_weekly_closing AS (
             raw_prices.prices['csgotrader'], raw_prices.date
         ) AS weekly_close
     FROM raw.prices AS raw_prices
+    INNER JOIN asset_reference_prices AS reference
+        ON raw_prices.id = reference.id
     WHERE
         raw_prices.prices['csgotrader'] > 0
+        AND raw_prices.prices['csgotrader']
+        >= price_floor_factor() * reference.reference_price
+        AND raw_prices.prices['csgotrader']
+        <= price_ceiling_factor() * reference.reference_price
         AND EXISTS (
             SELECT 1
             FROM selected_assets
@@ -108,8 +138,14 @@ asset_daily_prices AS (
         date_trunc('week', raw_prices.date) AS week_start,
         raw_prices.prices['csgotrader'] AS csgotrader
     FROM raw.prices AS raw_prices
+    INNER JOIN asset_reference_prices AS reference
+        ON raw_prices.id = reference.id
     WHERE
         raw_prices.prices['csgotrader'] > 0
+        AND raw_prices.prices['csgotrader']
+        >= price_floor_factor() * reference.reference_price
+        AND raw_prices.prices['csgotrader']
+        <= price_ceiling_factor() * reference.reference_price
         AND EXISTS (
             SELECT 1
             FROM selected_assets
