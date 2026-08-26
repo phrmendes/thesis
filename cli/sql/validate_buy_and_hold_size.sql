@@ -1,3 +1,6 @@
+-- This query checks that the selected asset count equals the requested K value.
+-- The buy-and-hold command uses this result before it commits the portfolio.
+
 SELECT
     strategy_parameters.portfolio_size,
     (

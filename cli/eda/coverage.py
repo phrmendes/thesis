@@ -12,11 +12,11 @@ def coverage() -> list[Path]:
 
     with connect(str(DB_PATH)) as conn:
         daily = (
-            conn.sql((SQL_DIR / "coverage_daily.sql").read_text())
+            conn.sql((SQL_DIR / "summarize_weekly_coverage.sql").read_text())
             .pl()
             .with_columns(pl.col("metric_name").replace(DAILY_LABELS))
         )
-        items = conn.sql((SQL_DIR / "coverage_items.sql").read_text()).pl()
+        items = conn.sql((SQL_DIR / "summarize_asset_week_coverage.sql").read_text()).pl()
 
     paths: list[Path] = []
 

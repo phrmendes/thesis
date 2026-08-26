@@ -34,6 +34,7 @@ in
     gfortran
     zlib
     sqlfluff
+    graphviz
   ];
 
   tasks = {

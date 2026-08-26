@@ -3,7 +3,7 @@ from typing import Final
 
 BASE_URL: Final[str] = "https://prices.csgotrader.app"
 ITEMS_URL: Final[str] = "https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/{language}/all.json"
-SQL_DIR: Final[Path] = Path(__file__).resolve().parents[1] / "sql" / "data"
+SQL_DIR: Final[Path] = Path(__file__).resolve().parents[1] / "sql"
 DEFAULT_START: Final[str] = "2020-11-02"
 DEFAULT_END: Final[str] = "2023-10-30"
 DEFAULT_DATA_DIR: Final[str] = "files"

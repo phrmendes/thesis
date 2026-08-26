@@ -1,3 +1,6 @@
+-- This query summarizes temporal coverage and asset counts per week.
+-- It reads cleaned.returns. The EDA coverage command renders the result.
+
 WITH stats AS (
     SELECT
         cast(

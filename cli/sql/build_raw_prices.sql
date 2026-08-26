@@ -1,3 +1,7 @@
+-- This query creates raw.prices from daily parquet snapshots in ${data_dir}.
+-- It creates a stable ID from each full market name.
+-- It also creates a normalized family name for grouping related variants.
+
 CREATE OR REPLACE MACRO normalize_skin_name(item_name) AS (
     regexp_replace(
         regexp_replace(

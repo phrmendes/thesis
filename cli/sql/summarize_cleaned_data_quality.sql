@@ -1,3 +1,6 @@
+-- This query summarizes size, return signs, coverage, and metric availability.
+-- It reads cleaned.returns. The EDA quality command renders the result.
+
 WITH stats AS (
     SELECT
         count(*) AS records,

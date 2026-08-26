@@ -75,7 +75,7 @@ def has_item_metadata(db_path: Path) -> bool:
     if not db_path.exists():
         return False
 
-    query = Template((SQL_DIR / "has_item_metadata.sql").read_text()).substitute()
+    query = Template((SQL_DIR / "check_raw_item_metadata.sql").read_text()).substitute()
 
     with connect(str(db_path), read_only=True) as conn:
         return cast(bool, conn.sql(query).pl().item())

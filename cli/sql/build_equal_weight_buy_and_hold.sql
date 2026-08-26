@@ -1,3 +1,7 @@
+-- This query creates portfolios.buy_and_hold from raw.prices and
+-- cleaned.returns. It selects assets from runtime strategy parameters.
+-- It gives equal initial weights and applies a 10% fee at final sale.
+
 CREATE OR REPLACE MACRO sale_net_factor() AS (0.9);
 CREATE OR REPLACE MACRO return_cap() AS (1.0);
 

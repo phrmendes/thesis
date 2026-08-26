@@ -1,3 +1,6 @@
+-- This query attaches item rarity from raw.items to raw.prices. It replaces the
+-- raw price table after the join. The data join command uses this query.
+
 CREATE TABLE raw.prices_joined AS
 SELECT
     raw_prices.date,

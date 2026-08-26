@@ -12,7 +12,7 @@ def quality() -> Path:
 
     with connect(str(DB_PATH)) as conn:
         stats = (
-            conn.sql((SQL_DIR / "quality.sql").read_text())
+            conn.sql((SQL_DIR / "summarize_cleaned_data_quality.sql").read_text())
             .pl()
             .with_columns(pl.col("metric_name").replace(METRIC_LABELS))
         )

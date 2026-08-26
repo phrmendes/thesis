@@ -1,3 +1,7 @@
+-- This query summarizes weekly asset returns in cleaned.returns. It reports the
+-- ten highest mean-return assets and aggregate summary rows with risk metrics.
+-- The EDA returns command renders the result as a table.
+
 WITH asset_stats AS (
     SELECT
         cleaned_returns.id,

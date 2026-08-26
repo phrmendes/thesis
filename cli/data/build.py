@@ -28,10 +28,10 @@ def build(
     threads = max(1, cpu - headroom)
     items_path = items_path or Path(DEFAULT_ITEMS_PATH)
     sql_kwargs = {"data_dir": str(data_dir), "items_path": str(items_path)}
-    build_sql = Template((SQL_DIR / "build.sql").read_text()).substitute(**sql_kwargs)
-    items_sql = Template((SQL_DIR / "items.sql").read_text()).substitute(**sql_kwargs)
-    count_parquet = Template((SQL_DIR / "count_parquet.sql").read_text()).substitute(**sql_kwargs)
-    count_prices = (SQL_DIR / "count_prices.sql").read_text()
+    build_sql = Template((SQL_DIR / "build_raw_prices.sql").read_text()).substitute(**sql_kwargs)
+    items_sql = Template((SQL_DIR / "build_raw_item_metadata.sql").read_text()).substitute(**sql_kwargs)
+    count_parquet = Template((SQL_DIR / "count_parquet_rows.sql").read_text()).substitute(**sql_kwargs)
+    count_prices = (SQL_DIR / "count_raw_price_rows.sql").read_text()
 
     with connect(str(db_path)) as conn:
         conn.execute(f"SET threads = {threads}")

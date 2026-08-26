@@ -24,9 +24,9 @@ def buy_and_hold(
 ) -> int:
     """Build a buy-and-hold strategy for one portfolio size."""
     db_path = db_path or Path(DEFAULT_DB_PATH)
-    strategy_query = (SQL_DIR / "buy_and_hold.sql").read_text()
-    validation_query = (SQL_DIR / "validate_portfolio_sizes.sql").read_text()
-    count_query = (SQL_DIR / "count_buy_and_hold_rows.sql").read_text()
+    strategy_query = (SQL_DIR / "build_equal_weight_buy_and_hold.sql").read_text()
+    validation_query = (SQL_DIR / "validate_buy_and_hold_size.sql").read_text()
+    count_query = (SQL_DIR / "count_buy_and_hold_portfolio_weeks.sql").read_text()
 
     with connect(str(db_path)) as conn:
         conn.register(

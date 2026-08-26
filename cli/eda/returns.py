@@ -8,7 +8,7 @@ from .constants import DB_PATH, LABEL_MAP, RETURN_COLUMNS, SQL_DIR, TABLES_DIR
 
 
 def returns() -> Path:
-    query = (SQL_DIR / "returns.sql").read_text()
+    query = (SQL_DIR / "summarize_weekly_return_statistics.sql").read_text()
     with connect(str(DB_PATH)) as conn:
         df = conn.sql(query).pl().with_columns(pl.col("name").replace(LABEL_MAP))
 

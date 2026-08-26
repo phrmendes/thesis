@@ -1,3 +1,7 @@
+-- This query creates cleaned.returns from raw.prices. It selects assets with a
+-- mean csgotrader price of at least 1 and at least 500 positive observations.
+-- It calculates capped weekly closing-price returns and risk-adjusted metrics.
+
 CREATE OR REPLACE MACRO return_cap() AS (1.0);
 
 CREATE SCHEMA IF NOT EXISTS cleaned;

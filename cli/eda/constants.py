@@ -3,7 +3,7 @@ from typing import Final
 
 DB_PATH: Final[Path] = Path("files/csgo.duckdb")
 TABLES_DIR: Final[Path] = Path("tex/tables")
-SQL_DIR: Final[Path] = Path(__file__).resolve().parents[1] / "sql" / "eda"
+SQL_DIR: Final[Path] = Path(__file__).resolve().parents[1] / "sql"
 
 LABEL_MAP: Final[dict[str, str]] = {"rest": "Restante", "overall": "Geral"}
 

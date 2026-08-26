@@ -1,3 +1,6 @@
+-- This query checks if raw item metadata is available in the database. The data
+-- fetch command uses this result to decide if it must download item metadata.
+
 SELECT
     EXISTS (
         SELECT 1

@@ -1,3 +1,7 @@
+-- This query creates raw.items from the item metadata JSON template parameter.
+-- It retains one stable ID and one rarity value for each market name.
+-- The data build command uses this table to attach metadata to raw prices.
+
 CREATE SCHEMA IF NOT EXISTS raw;
 
 CREATE OR REPLACE TABLE raw.items AS
