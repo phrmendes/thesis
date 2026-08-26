@@ -18,7 +18,16 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from typer import progressbar
 from uvloop import new_event_loop
 
-from .constants import BASE_URL, ITEMS_URL, SQL_DIR
+from .constants import (
+    BASE_URL,
+    HTTP_TIMEOUT,
+    ITEMS_URL,
+    RETRY_ATTEMPTS,
+    RETRY_WAIT_MAX,
+    RETRY_WAIT_MIN,
+    RETRY_WAIT_MULTIPLIER,
+    SQL_DIR,
+)
 from .models import ItemData, ItemPrices
 
 
@@ -39,13 +48,17 @@ class PriceRow(TypedDict):
 
 @retry(
     retry=retry_if_exception_type((HTTPStatusError, NetworkError, TimeoutException)),
-    wait=wait_exponential(multiplier=1, min=1, max=30),
-    stop=stop_after_attempt(5),
+    wait=wait_exponential(
+        multiplier=RETRY_WAIT_MULTIPLIER,
+        min=RETRY_WAIT_MIN,
+        max=RETRY_WAIT_MAX,
+    ),
+    stop=stop_after_attempt(RETRY_ATTEMPTS),
     reraise=True,
 )
 def fetch_items(language: str, output: Path) -> Path:
     """Download static item metadata from the CSGO-API repository."""
-    response = get(ITEMS_URL.format(language=language), timeout=30)
+    response = get(ITEMS_URL.format(language=language), timeout=HTTP_TIMEOUT)
 
     if response.status_code == HTTPStatus.TOO_MANY_REQUESTS or response.is_server_error:
         response.raise_for_status()
@@ -70,8 +83,12 @@ def has_item_metadata(db_path: Path) -> bool:
 
 @retry(
     retry=retry_if_exception_type((HTTPStatusError, NetworkError, TimeoutException)),
-    wait=wait_exponential(multiplier=1, min=1, max=30),
-    stop=stop_after_attempt(5),
+    wait=wait_exponential(
+        multiplier=RETRY_WAIT_MULTIPLIER,
+        min=RETRY_WAIT_MIN,
+        max=RETRY_WAIT_MAX,
+    ),
+    stop=stop_after_attempt(RETRY_ATTEMPTS),
     reraise=True,
 )
 async def request_snapshot(client: AsyncClient, url: str, sem: Semaphore) -> Response:

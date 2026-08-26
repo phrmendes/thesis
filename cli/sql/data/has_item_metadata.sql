@@ -11,6 +11,6 @@ SELECT
         FROM information_schema.columns
         WHERE
             table_schema = 'main'
-            AND table_name = 'prices'
+            AND table_name = 'prices_raw'
             AND column_name = 'rarity'
     ) AS has_item_metadata

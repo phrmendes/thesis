@@ -5,6 +5,7 @@ from typing import Annotated
 from typer import Exit, Option, Typer, secho
 
 from .build import build
+from .clear import clear
 from .constants import (
     DEFAULT_CONCURRENCY,
     DEFAULT_DATA_DIR,
@@ -12,6 +13,7 @@ from .constants import (
     DEFAULT_END,
     DEFAULT_HEADROOM,
     DEFAULT_ITEMS_PATH,
+    DEFAULT_LANGUAGE,
     DEFAULT_START,
 )
 from .fetch import fetch, fetch_items, has_item_metadata
@@ -48,11 +50,17 @@ def fetch_cmd(
     items_path = Path(DEFAULT_ITEMS_PATH)
 
     if force or not has_item_metadata(database):
-        path = fetch_items("en", items_path)
+        path = fetch_items(DEFAULT_LANGUAGE, items_path)
         secho(f"Written {path}", fg="green")
         return
 
     secho("Skipped item metadata: items.json and database metadata exist.", fg="yellow")
+
+
+@app.command(name="clear", help="Build returns with weekly metrics and outlier removal")
+def clear_cmd() -> None:
+    rows = clear()
+    secho(f"Built returns with {rows:,} rows", fg="green")
 
 
 @app.command(name="join", help="Join prices with rarity and remove the source tables")
