@@ -1,18 +1,20 @@
 WITH stats AS (
     SELECT
         count(*) AS records,
-        count(DISTINCT id) AS assets,
-        count(DISTINCT week) AS weeks,
-        count(*) FILTER (WHERE mean_return > 0) AS positive_weeks,
-        count(*) FILTER (WHERE mean_return < 0) AS negative_weeks,
-        count(*) FILTER (WHERE sharpe IS NOT NULL) AS with_sharpe
-    FROM cleaned.returns
+        count(DISTINCT cleaned_returns.id) AS assets,
+        count(DISTINCT cleaned_returns.week) AS weeks,
+        count(*) FILTER (WHERE cleaned_returns.return > 0) AS positive_weeks,
+        count(*) FILTER (WHERE cleaned_returns.return < 0) AS negative_weeks,
+        count(*) FILTER (
+            WHERE cleaned_returns.sharpe IS NOT NULL
+        ) AS with_sharpe
+    FROM cleaned.returns AS cleaned_returns
 ),
 
 per_asset AS (
-    SELECT count(week) AS n_weeks
-    FROM cleaned.returns
-    GROUP BY id
+    SELECT count(cleaned_returns.week) AS n_weeks
+    FROM cleaned.returns AS cleaned_returns
+    GROUP BY cleaned_returns.id
 )
 
 SELECT

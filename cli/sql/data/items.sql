@@ -13,7 +13,6 @@ WITH source AS (
 
 SELECT
     sha256(market_hash_name) AS id,
-    max(market_hash_name) AS item_name,
     max(rarity) AS rarity
 FROM source
 WHERE

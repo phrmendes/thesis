@@ -1,4 +1,3 @@
-CREATE OR REPLACE MACRO net_factor() AS (0.9);
 CREATE OR REPLACE MACRO return_cap() AS (1.0);
 
 CREATE SCHEMA IF NOT EXISTS cleaned;
@@ -19,19 +18,19 @@ WITH selected_assets AS (
 
 daily_prices AS (
     SELECT
-        p.id,
-        p.name,
-        p.family,
-        p.rarity,
-        p.date,
-        p.prices['csgotrader'] AS price
-    FROM raw.prices AS p
+        raw_prices.id,
+        raw_prices.name,
+        raw_prices.family,
+        raw_prices.rarity,
+        raw_prices.date,
+        raw_prices.prices['csgotrader'] AS price
+    FROM raw.prices AS raw_prices
     WHERE
-        p.prices['csgotrader'] > 0
+        raw_prices.prices['csgotrader'] > 0
         AND EXISTS (
             SELECT 1
-            FROM selected_assets AS u
-            WHERE u.id = p.id
+            FROM selected_assets
+            WHERE selected_assets.id = raw_prices.id
         )
 ),
 
@@ -42,8 +41,7 @@ weekly_prices AS (
         family,
         rarity,
         date_trunc('week', date) AS week_start,
-        avg(price) AS mean_price,
-        median(price) AS median_price
+        arg_max(price, date) AS closing_price
     FROM daily_prices
     GROUP BY id, name, family, rarity, date_trunc('week', date)
 ),
@@ -55,16 +53,10 @@ weekly_returns AS (
         family,
         rarity,
         week_start,
-        mean_price,
-        median_price,
-        net_factor() * mean_price / lag(mean_price) OVER (
+        closing_price / lag(closing_price) OVER (
             PARTITION BY id
             ORDER BY week_start
-        ) - 1 AS mean_basis_return,
-        net_factor() * median_price / lag(median_price) OVER (
-            PARTITION BY id
-            ORDER BY week_start
-        ) - 1 AS median_basis_return
+        ) - 1 AS return_value
     FROM weekly_prices
 ),
 
@@ -75,12 +67,9 @@ valid_returns AS (
         family,
         rarity,
         week_start,
-        mean_basis_return,
-        median_basis_return
+        return_value
     FROM weekly_returns
-    WHERE
-        mean_basis_return IS NOT NULL
-        AND median_basis_return IS NOT NULL
+    WHERE return_value IS NOT NULL
 ),
 
 winsorized AS (
@@ -91,11 +80,8 @@ winsorized AS (
         rarity,
         week_start,
         least(
-            greatest(mean_basis_return, -return_cap()), return_cap()
-        ) AS mean_basis_return,
-        least(
-            greatest(median_basis_return, -return_cap()), return_cap()
-        ) AS median_basis_return
+            greatest(return_value, -return_cap()), return_cap()
+        ) AS return_value
     FROM valid_returns
 ),
 
@@ -106,17 +92,15 @@ with_ratios AS (
         family,
         rarity,
         week_start,
-        mean_basis_return,
-        median_basis_return,
-        avg(mean_basis_return) OVER (PARTITION BY id) AS avg_return,
-        stddev(mean_basis_return) OVER (PARTITION BY id) AS std_return,
+        return_value,
+        avg(return_value) OVER (PARTITION BY id) AS average_return,
+        stddev(return_value) OVER (PARTITION BY id) AS return_stddev,
         avg(
             CASE
-                WHEN mean_basis_return < 0
-                    THEN mean_basis_return * mean_basis_return
+                WHEN return_value < 0 THEN return_value * return_value
                 ELSE 0
             END
-        ) OVER (PARTITION BY id) AS semivariance
+        ) OVER (PARTITION BY id) AS return_semivariance
     FROM winsorized
 )
 
@@ -126,10 +110,10 @@ SELECT
     name,
     family,
     rarity,
-    mean_basis_return AS mean_return,
-    median_basis_return AS median_return,
-    avg_return / nullif(std_return, 0) AS sharpe,
-    avg_return / nullif(sqrt(semivariance), 0) AS sortino
+    return_value,
+    average_return / nullif(return_stddev, 0) AS sharpe,
+    average_return / nullif(sqrt(return_semivariance), 0) AS sortino
 FROM with_ratios;
 
 ALTER TABLE cleaned.returns RENAME COLUMN week_start TO week;
+ALTER TABLE cleaned.returns RENAME COLUMN return_value TO return;

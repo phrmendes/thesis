@@ -1,22 +1,24 @@
 WITH asset_stats AS (
     SELECT
-        id,
-        name,
-        family,
-        rarity,
-        avg(mean_return) AS mean_return,
-        median(mean_return) AS median_return,
-        min(mean_return) AS min_return,
-        max(mean_return) AS max_return,
-        stddev(mean_return) AS std_return,
+        cleaned_returns.id,
+        cleaned_returns.name,
+        avg(cleaned_returns.return) AS mean_return,
+        median(cleaned_returns.return) AS median_return,
+        min(cleaned_returns.return) AS min_return,
+        max(cleaned_returns.return) AS max_return,
+        stddev(cleaned_returns.return) AS std_return,
         stddev(
-            CASE WHEN mean_return < 0 THEN mean_return END
+            CASE
+                WHEN cleaned_returns.return < 0 THEN cleaned_returns.return
+            END
         ) AS negative_returns_std,
-        count(week) AS n_weeks,
-        max(sharpe) AS sharpe,
-        max(sortino) AS sortino
-    FROM cleaned.returns
-    GROUP BY id, name, family, rarity
+        count(cleaned_returns.week) AS n_weeks,
+        max(cleaned_returns.sharpe) AS sharpe,
+        max(cleaned_returns.sortino) AS sortino
+    FROM cleaned.returns AS cleaned_returns
+    GROUP BY
+        cleaned_returns.id,
+        cleaned_returns.name
 ),
 
 ranked AS (
