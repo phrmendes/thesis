@@ -1,9 +1,11 @@
 -- This query creates portfolios.buy_and_hold from raw.prices and
 -- cleaned.returns. It selects assets from runtime strategy parameters.
+-- It uses the first 70% of weeks for selection and the final 30% for holding.
 -- It gives equal initial weights and applies a 10% fee at final sale.
 
 CREATE OR REPLACE MACRO sale_net_factor() AS (0.9);
 CREATE OR REPLACE MACRO return_cap() AS (1.0);
+CREATE OR REPLACE MACRO selection_share() AS (0.7);
 
 CREATE SCHEMA IF NOT EXISTS portfolios;
 
@@ -23,7 +25,8 @@ week_periods AS (
     SELECT
         week_start,
         CASE
-            WHEN week_number <= floor(total_weeks * 2.0 / 3) THEN 'training'
+            WHEN week_number <= floor(total_weeks * selection_share())
+                THEN 'training'
             ELSE 'testing'
         END AS period
     FROM ordered_weeks
