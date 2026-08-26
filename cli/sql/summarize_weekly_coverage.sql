@@ -1,5 +1,5 @@
 -- This query summarizes temporal coverage and asset counts per week.
--- It reads cleaned.returns. The EDA coverage command renders the result.
+-- It reads cleaned.prices. The EDA coverage command renders the result.
 
 WITH stats AS (
     SELECT
@@ -21,7 +21,7 @@ WITH stats AS (
         SELECT
             week,
             count(*) AS assets_per_week
-        FROM cleaned.returns
+        FROM cleaned.prices
         GROUP BY week
     ) AS weekly_counts
 )

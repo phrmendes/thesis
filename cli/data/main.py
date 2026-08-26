@@ -57,10 +57,10 @@ def fetch_cmd(
     secho("Skipped item metadata: items.json and database metadata exist.", fg="yellow")
 
 
-@app.command(name="clear", help="Build returns with weekly metrics and outlier removal")
+@app.command(name="clear", help="Build cleaned weekly prices")
 def clear_cmd() -> None:
     rows = clear()
-    secho(f"Built returns with {rows:,} rows", fg="green")
+    secho(f"Built cleaned prices with {rows:,} rows", fg="green")
 
 
 @app.command(name="join", help="Join prices with rarity and remove the source tables")

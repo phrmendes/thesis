@@ -1,11 +1,11 @@
--- This query groups assets by observed weekly return counts in cleaned.returns.
+-- This query groups assets by observed weekly return counts in cleaned.prices.
 -- The EDA coverage command uses the result for the asset persistence table.
 
 WITH week_counts AS (
     SELECT
         id,
         count(week) AS weeks
-    FROM cleaned.returns
+    FROM cleaned.prices
     GROUP BY id
 ),
 

@@ -39,6 +39,12 @@ in
 
   tasks = {
     "thesis:build".exec = "pandoc --defaults pandoc.yaml thesis.md";
+    "chart:build".exec = ''
+      for source in charts/*.dot; do
+        name="$(basename "$source" .dot)"
+        dot -Tsvg "$source" -o "images/$name.svg"
+      done
+    '';
   };
 
   treefmt.config.programs = {

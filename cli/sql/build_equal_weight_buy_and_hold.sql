@@ -1,7 +1,7 @@
--- This query creates portfolios.buy_and_hold from raw.prices and
--- cleaned.returns. It selects assets from runtime strategy parameters.
+-- This query creates portfolios.buy_and_hold from cleaned.prices. It selects
+-- assets from runtime strategy parameters and gives them equal initial weights.
 -- It uses the first 70% of weeks for selection and the final 30% for holding.
--- It gives equal initial weights and applies a 10% fee at final sale.
+-- It applies a 10% fee only at final sale.
 
 CREATE OR REPLACE MACRO sale_net_factor() AS (0.9);
 CREATE OR REPLACE MACRO return_cap() AS (1.0);
@@ -17,7 +17,7 @@ WITH ordered_weeks AS (
         count(*) OVER () AS total_weeks
     FROM (
         SELECT DISTINCT week
-        FROM cleaned.returns
+        FROM cleaned.prices
     ) AS weekly_horizon
 ),
 
@@ -30,71 +30,16 @@ week_periods AS (
             ELSE 'testing'
         END AS period
     FROM ordered_weeks
-),
-
-candidate_assets AS (
-    SELECT DISTINCT
-        id,
-        name,
-        family,
-        rarity
-    FROM cleaned.returns
-),
-
-observed_weekly_prices AS (
-    SELECT
-        raw_prices.id,
-        date_trunc('week', raw_prices.date) AS week_start,
-        arg_max(
-            raw_prices.prices['csgotrader'],
-            raw_prices.date
-        ) AS observed_price
-    FROM raw.prices AS raw_prices
-    WHERE
-        raw_prices.prices['csgotrader'] > 0
-        AND EXISTS (
-            SELECT 1
-            FROM candidate_assets
-            WHERE candidate_assets.id = raw_prices.id
-        )
-    GROUP BY raw_prices.id, date_trunc('week', raw_prices.date)
-),
-
-asset_week_grid AS (
-    SELECT
-        candidate_assets.id,
-        week_periods.week_start,
-        week_periods.period,
-        (
-            SELECT observed_weekly_prices.observed_price
-            FROM observed_weekly_prices
-            WHERE
-                observed_weekly_prices.id = candidate_assets.id
-                AND observed_weekly_prices.week_start = week_periods.week_start
-        ) AS observed_price
-    FROM candidate_assets
-    CROSS JOIN week_periods
-),
-
-forward_filled_prices AS (
-    SELECT
-        id,
-        week_start,
-        period,
-        last_value(observed_price IGNORE NULLS) OVER (
-            PARTITION BY id
-            ORDER BY week_start
-        ) AS closing_price
-    FROM asset_week_grid
 )
 
 SELECT
-    id,
-    week_start,
-    period,
-    closing_price
-FROM forward_filled_prices
-WHERE closing_price IS NOT NULL;
+    cleaned_prices.id,
+    cleaned_prices.week AS week_start,
+    week_periods.period,
+    cleaned_prices.price AS closing_price
+FROM cleaned.prices AS cleaned_prices
+CROSS JOIN week_periods
+WHERE cleaned_prices.week = week_periods.week_start;
 
 CREATE TEMP TABLE buy_and_hold_selected_assets AS
 WITH weekly_asset_returns AS (
@@ -207,6 +152,9 @@ WHERE
 CREATE OR REPLACE TABLE portfolios.buy_and_hold AS
 WITH test_positions AS (
     SELECT
+        buy_and_hold_selected_assets.roi,
+        buy_and_hold_selected_assets.sharpe,
+        buy_and_hold_selected_assets.sortino,
         test_prices.id,
         test_prices.week_start,
         test_prices.closing_price,
