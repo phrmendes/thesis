@@ -1,9 +1,14 @@
 -- This query creates cleaned.prices from raw.prices. It selects assets with a
 -- mean csgotrader price of at least 1 and at least 500 positive observations.
--- It calculates weekly closing prices.
--- It carries the last observed quote forward.
+-- It keeps weekly closing prices and adds the weekly between-week return, a
+-- net weekly roi after the sale fee, and per-week sharpe and sortino based on
+-- within-week daily return volatility. It drops each asset's first week, whose
+-- weekly return is NULL. The model and strategy commands consume this table.
 
 CREATE SCHEMA IF NOT EXISTS cleaned;
+
+CREATE OR REPLACE MACRO sale_net_factor() AS (0.9);
+CREATE OR REPLACE MACRO return_cap() AS (1.0);
 
 CREATE OR REPLACE TABLE cleaned.prices AS
 WITH selected_assets AS (
@@ -25,14 +30,13 @@ weekly_horizon AS (
     WHERE prices['csgotrader'] > 0
 ),
 
-observed_weekly_prices AS (
+observed_weekly_closing AS (
     SELECT
         raw_prices.id,
         date_trunc('week', raw_prices.date) AS week_start,
         arg_max(
-            raw_prices.prices['csgotrader'],
-            raw_prices.date
-        ) AS observed_price
+            raw_prices.prices['csgotrader'], raw_prices.date
+        ) AS weekly_close
     FROM raw.prices AS raw_prices
     WHERE
         raw_prices.prices['csgotrader'] > 0
@@ -52,41 +56,126 @@ asset_week_grid AS (
         selected_assets.rarity,
         weekly_horizon.week_start,
         (
-            SELECT observed_weekly_prices.observed_price
-            FROM observed_weekly_prices
+            SELECT observed_weekly_closing.weekly_close
+            FROM observed_weekly_closing
             WHERE
-                observed_weekly_prices.id = selected_assets.id
-                AND (
-                    observed_weekly_prices.week_start
-                    = weekly_horizon.week_start
-                )
-        ) AS observed_price
+                observed_weekly_closing.id = selected_assets.id
+                AND observed_weekly_closing.week_start
+                = weekly_horizon.week_start
+        ) AS weekly_close
     FROM selected_assets
     CROSS JOIN weekly_horizon
 ),
 
-forward_filled_prices AS (
+forward_filled_weekly AS (
     SELECT
         id,
         name,
         family,
         rarity,
         week_start,
-        last_value(observed_price IGNORE NULLS) OVER (
+        last_value(weekly_close IGNORE NULLS) OVER (
             PARTITION BY id
             ORDER BY week_start
         ) AS price
     FROM asset_week_grid
+),
+
+weekly_series AS (
+    SELECT
+        id,
+        name,
+        family,
+        rarity,
+        week_start,
+        price,
+        price / lag(price) OVER (
+            PARTITION BY id
+            ORDER BY week_start
+        ) AS price_ratio,
+        price / lag(price) OVER (
+            PARTITION BY id
+            ORDER BY week_start
+        ) - 1 AS raw_return
+    FROM forward_filled_weekly
+    WHERE price IS NOT NULL
+),
+
+asset_daily_prices AS (
+    SELECT
+        raw_prices.id,
+        raw_prices.date,
+        date_trunc('week', raw_prices.date) AS week_start,
+        raw_prices.prices['csgotrader'] AS csgotrader
+    FROM raw.prices AS raw_prices
+    WHERE
+        raw_prices.prices['csgotrader'] > 0
+        AND EXISTS (
+            SELECT 1
+            FROM selected_assets
+            WHERE selected_assets.id = raw_prices.id
+        )
+),
+
+within_week_daily AS (
+    SELECT
+        id,
+        week_start,
+        csgotrader / lag(csgotrader) OVER (
+            PARTITION BY id, week_start
+            ORDER BY date
+        ) - 1 AS daily_return,
+        first_value(csgotrader) OVER (
+            PARTITION BY id, week_start
+            ORDER BY date
+        ) AS first_close,
+        last_value(csgotrader) OVER (
+            PARTITION BY id, week_start
+            ORDER BY date
+            ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+        ) AS last_close
+    FROM asset_daily_prices
+),
+
+within_week_stats AS (
+    SELECT
+        id,
+        week_start,
+        last_close / first_close - 1 AS week_return,
+        stddev(daily_return) AS week_daily_std,
+        sqrt(
+            avg(
+                CASE
+                    WHEN daily_return < 0 THEN daily_return * daily_return
+                    ELSE 0
+                END
+            )
+        ) AS week_daily_downside
+    FROM within_week_daily
+    GROUP BY id, week_start, first_close, last_close
 )
 
 SELECT
-    week_start,
-    id,
-    name,
-    family,
-    rarity,
-    price
-FROM forward_filled_prices
-WHERE price IS NOT NULL;
+    weekly_series.id,
+    weekly_series.name,
+    weekly_series.family,
+    weekly_series.rarity,
+    weekly_series.week_start,
+    weekly_series.price,
+    least(
+        greatest(weekly_series.raw_return, -return_cap()), return_cap()
+    ) AS return_value,
+    sale_net_factor() * weekly_series.price_ratio - 1 AS roi,
+    within_week_stats.week_return
+    / nullif(within_week_stats.week_daily_std, 0) AS sharpe,
+    within_week_stats.week_return
+    / nullif(within_week_stats.week_daily_downside, 0) AS sortino
+FROM weekly_series
+LEFT JOIN within_week_stats
+    ON
+        weekly_series.id = within_week_stats.id
+        AND weekly_series.week_start = within_week_stats.week_start
+WHERE weekly_series.raw_return IS NOT NULL;
 
 ALTER TABLE cleaned.prices RENAME COLUMN week_start TO week;
+ALTER TABLE cleaned.prices RENAME COLUMN return_value TO return;
