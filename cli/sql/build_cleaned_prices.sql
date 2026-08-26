@@ -1,11 +1,8 @@
--- This query creates cleaned.prices from raw.prices. It selects assets with a
--- mean csgotrader price of at least 1 and at least 500 positive observations.
--- It keeps weekly closing prices and adds the weekly between-week return, a
--- net weekly roi after the sale fee, and per-week sharpe and sortino based on
--- within-week daily return volatility. It drops spurious daily prices outside a
--- floor of 5% and a ceiling of 20x of each asset's median price. It drops each
--- asset's first week, whose weekly return is NULL. The model and strategy
--- commands consume this table.
+-- This query builds cleaned.prices from raw.prices. The inputs are the
+-- csgotrader price data and the SteamDB sale calendar. The output is
+-- cleaned.prices, which the model and strategy commands consume. The main rule
+-- keeps weekly closing prices, drops spurious prices and the first week of each
+-- asset, and labels each week with its sale season or none.
 
 CREATE SCHEMA IF NOT EXISTS cleaned;
 
@@ -189,6 +186,75 @@ within_week_stats AS (
         ) AS week_daily_downside
     FROM within_week_daily
     GROUP BY id, week_start, first_close, last_close
+),
+
+sale_periods AS (
+    SELECT
+        'autumn' AS season,
+        DATE '2020-11-25' AS start_date,
+        DATE '2020-12-01' AS end_date
+    UNION ALL
+    SELECT
+        'winter' AS season,
+        DATE '2020-12-22' AS start_date,
+        DATE '2021-01-05' AS end_date
+    UNION ALL
+    SELECT
+        'summer' AS season,
+        DATE '2021-06-24' AS start_date,
+        DATE '2021-07-08' AS end_date
+    UNION ALL
+    SELECT
+        'autumn' AS season,
+        DATE '2021-11-24' AS start_date,
+        DATE '2021-12-01' AS end_date
+    UNION ALL
+    SELECT
+        'winter' AS season,
+        DATE '2021-12-22' AS start_date,
+        DATE '2022-01-05' AS end_date
+    UNION ALL
+    SELECT
+        'summer' AS season,
+        DATE '2022-06-23' AS start_date,
+        DATE '2022-07-07' AS end_date
+    UNION ALL
+    SELECT
+        'autumn' AS season,
+        DATE '2022-11-22' AS start_date,
+        DATE '2022-11-29' AS end_date
+    UNION ALL
+    SELECT
+        'winter' AS season,
+        DATE '2022-12-22' AS start_date,
+        DATE '2023-01-05' AS end_date
+    UNION ALL
+    SELECT
+        'spring' AS season,
+        DATE '2023-03-16' AS start_date,
+        DATE '2023-03-23' AS end_date
+    UNION ALL
+    SELECT
+        'summer' AS season,
+        DATE '2023-06-29' AS start_date,
+        DATE '2023-07-13' AS end_date
+),
+
+week_sale_season AS (
+    SELECT
+        weekly_horizon.week_start,
+        coalesce(
+            min(sale_periods.season),
+            'none'
+        ) AS sale_season
+    FROM weekly_horizon
+    LEFT JOIN sale_periods
+        ON NOT (
+            weekly_horizon.week_start > sale_periods.end_date
+            OR weekly_horizon.week_start + INTERVAL '6 days'
+            < sale_periods.start_date
+        )
+    GROUP BY weekly_horizon.week_start
 )
 
 SELECT
@@ -205,12 +271,15 @@ SELECT
     within_week_stats.week_return
     / nullif(within_week_stats.week_daily_std, 0) AS sharpe,
     within_week_stats.week_return
-    / nullif(within_week_stats.week_daily_downside, 0) AS sortino
+    / nullif(within_week_stats.week_daily_downside, 0) AS sortino,
+    week_sale_season.sale_season
 FROM weekly_series
 LEFT JOIN within_week_stats
     ON
         weekly_series.id = within_week_stats.id
         AND weekly_series.week_start = within_week_stats.week_start
+LEFT JOIN week_sale_season
+    ON weekly_series.week_start = week_sale_season.week_start
 WHERE weekly_series.raw_return IS NOT NULL;
 
 ALTER TABLE cleaned.prices RENAME COLUMN week_start TO week;
