@@ -2,7 +2,7 @@ WITH week_counts AS (
     SELECT
         id,
         count(week) AS weeks
-    FROM returns
+    FROM cleaned.returns
     GROUP BY id
 ),
 

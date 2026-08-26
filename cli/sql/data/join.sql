@@ -1,15 +1,15 @@
-CREATE TABLE prices_joined AS
+CREATE TABLE raw.prices_joined AS
 SELECT
-    prices_raw.date,
-    prices_raw.id,
-    prices_raw.name,
-    prices_raw.family,
-    prices_raw.prices,
-    items.rarity
-FROM prices_raw
-LEFT JOIN items
-    ON prices_raw.id = items.id;
+    raw_prices.date,
+    raw_prices.id,
+    raw_prices.name,
+    raw_prices.family,
+    raw_prices.prices,
+    item_metadata.rarity
+FROM raw.prices AS raw_prices
+LEFT JOIN raw.items AS item_metadata
+    ON raw_prices.id = item_metadata.id;
 
-DROP TABLE prices_raw;
-DROP TABLE items;
-ALTER TABLE prices_joined RENAME TO prices_raw;
+DROP TABLE raw.prices;
+DROP TABLE raw.items;
+ALTER TABLE raw.prices_joined RENAME TO prices;

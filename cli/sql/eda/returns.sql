@@ -15,7 +15,7 @@ WITH asset_stats AS (
         count(week) AS n_weeks,
         max(sharpe) AS sharpe,
         max(sortino) AS sortino
-    FROM returns
+    FROM cleaned.returns
     GROUP BY id, name, family, rarity
 ),
 

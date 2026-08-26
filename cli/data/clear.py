@@ -13,4 +13,4 @@ def clear(db_path: Path | None = None) -> int:
 
     with connect(str(db_path)) as conn:
         conn.execute(query)
-        return cast(int, conn.sql("SELECT count(*) FROM returns").pl().item())
+        return cast(int, conn.sql("SELECT count(*) FROM cleaned.returns").pl().item())

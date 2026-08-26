@@ -1,14 +1,16 @@
 CREATE OR REPLACE MACRO net_factor() AS (0.9);
 CREATE OR REPLACE MACRO return_cap() AS (1.0);
 
-CREATE OR REPLACE TABLE returns AS
+CREATE SCHEMA IF NOT EXISTS cleaned;
+
+CREATE OR REPLACE TABLE cleaned.returns AS
 WITH selected_assets AS (
     SELECT
         id,
         name,
         family,
         rarity
-    FROM prices_raw
+    FROM raw.prices
     GROUP BY id, name, family, rarity
     HAVING
         avg(prices['csgotrader']) FILTER (WHERE prices['csgotrader'] > 0) >= 1.0
@@ -23,7 +25,7 @@ daily_prices AS (
         p.rarity,
         p.date,
         p.prices['csgotrader'] AS price
-    FROM prices_raw AS p
+    FROM raw.prices AS p
     WHERE
         p.prices['csgotrader'] > 0
         AND EXISTS (
@@ -130,4 +132,4 @@ SELECT
     avg_return / nullif(sqrt(semivariance), 0) AS sortino
 FROM with_ratios;
 
-ALTER TABLE returns RENAME COLUMN week_start TO week;
+ALTER TABLE cleaned.returns RENAME COLUMN week_start TO week;

@@ -10,7 +10,9 @@ CREATE OR REPLACE MACRO normalize_skin_name(item_name) AS (
     )
 );
 
-CREATE OR REPLACE TABLE prices_raw AS
+CREATE SCHEMA IF NOT EXISTS raw;
+
+CREATE OR REPLACE TABLE raw.prices AS
 SELECT
     date,
     sha256(item_hash_name) AS id,
@@ -27,5 +29,5 @@ WHERE
     AND trim(item_hash_name) <> ''
 ORDER BY item_hash_name, date;
 
-ALTER TABLE prices_raw RENAME COLUMN item_name TO name;
-ALTER TABLE prices_raw RENAME COLUMN family_name TO family;
+ALTER TABLE raw.prices RENAME COLUMN item_name TO name;
+ALTER TABLE raw.prices RENAME COLUMN family_name TO family;

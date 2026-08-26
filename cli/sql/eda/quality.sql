@@ -6,12 +6,12 @@ WITH stats AS (
         count(*) FILTER (WHERE mean_return > 0) AS positive_weeks,
         count(*) FILTER (WHERE mean_return < 0) AS negative_weeks,
         count(*) FILTER (WHERE sharpe IS NOT NULL) AS with_sharpe
-    FROM returns
+    FROM cleaned.returns
 ),
 
 per_asset AS (
     SELECT count(week) AS n_weeks
-    FROM returns
+    FROM cleaned.returns
     GROUP BY id
 )
 

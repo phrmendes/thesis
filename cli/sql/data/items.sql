@@ -1,4 +1,6 @@
-CREATE OR REPLACE TABLE items AS
+CREATE SCHEMA IF NOT EXISTS raw;
+
+CREATE OR REPLACE TABLE raw.items AS
 WITH source AS (
     SELECT
         market_hash_name,

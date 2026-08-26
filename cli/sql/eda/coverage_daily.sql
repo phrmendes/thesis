@@ -18,7 +18,7 @@ WITH stats AS (
         SELECT
             week,
             count(*) AS assets_per_week
-        FROM returns
+        FROM cleaned.returns
         GROUP BY week
     ) AS weekly_counts
 )

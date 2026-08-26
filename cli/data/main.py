@@ -18,6 +18,7 @@ from .constants import (
 )
 from .fetch import fetch, fetch_items, has_item_metadata
 from .join import join
+from .migrate_schemas import migrate_schemas
 
 app = Typer(name="data", help="Data pipeline commands")
 
@@ -61,6 +62,13 @@ def fetch_cmd(
 def clear_cmd() -> None:
     rows = clear()
     secho(f"Built returns with {rows:,} rows", fg="green")
+
+
+@app.command(name="migrate-schemas", help="Move tables into raw, cleaned, and strategy schemas")
+def migrate_schemas_cmd() -> None:
+    migrated = migrate_schemas()
+    message = "Migrated database schemas" if migrated else "Database schemas already migrated"
+    secho(message, fg="green")
 
 
 @app.command(name="join", help="Join prices with rarity and remove the source tables")
