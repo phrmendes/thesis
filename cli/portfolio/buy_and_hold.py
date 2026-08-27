@@ -7,7 +7,7 @@ from duckdb import connect
 from .constants import DEFAULT_DB_PATH, SQL_DIR
 
 
-class StrategyValidationError(ValueError):
+class PortfolioValidationError(ValueError):
     """Raise when a buy-and-hold request is invalid."""
 
     @classmethod
@@ -22,15 +22,15 @@ def buy_and_hold(
     sortino: float,
     db_path: Path | None = None,
 ) -> int:
-    """Build a buy-and-hold strategy for one portfolio size."""
+    """Build a buy-and-hold portfolio for one portfolio size."""
     db_path = db_path or Path(DEFAULT_DB_PATH)
-    strategy_query = (SQL_DIR / "build_equal_weight_buy_and_hold.sql").read_text()
+    portfolio_query = (SQL_DIR / "build_equal_weight_buy_and_hold.sql").read_text()
     validation_query = (SQL_DIR / "validate_buy_and_hold_size.sql").read_text()
     count_query = (SQL_DIR / "count_buy_and_hold_portfolio_weeks.sql").read_text()
 
     with connect(str(db_path)) as conn:
         conn.register(
-            "strategy_parameters",
+            "portfolio_parameters",
             pl.DataFrame(
                 {
                     "portfolio_size": [portfolio_size],
@@ -41,13 +41,13 @@ def buy_and_hold(
             ),
         )
         conn.begin()
-        conn.execute(strategy_query)
+        conn.execute(portfolio_query)
         invalid_sizes = conn.sql(validation_query).pl()
 
         if invalid_sizes.height:
             conn.rollback()
             available = cast(int, invalid_sizes["selected_assets"].item())
-            raise StrategyValidationError.insufficient_eligible_assets(portfolio_size, available)
+            raise PortfolioValidationError.insufficient_eligible_assets(portfolio_size, available)
 
         conn.commit()
 

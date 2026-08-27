@@ -1,5 +1,5 @@
 -- This query creates portfolios.buy_and_hold from cleaned.prices. It selects
--- assets from runtime strategy parameters and gives them equal initial weights.
+-- assets from runtime parameters and gives them equal initial weights.
 -- It uses the first 70% of weeks for selection and the final 30% for holding.
 -- It applies a 10% fee only at final sale.
 
@@ -114,12 +114,12 @@ eligible_candidates AS (
         candidate_metrics.sharpe,
         candidate_metrics.sortino,
         (
-            candidate_metrics.roi >= strategy_parameters.roi
-            AND candidate_metrics.sharpe >= strategy_parameters.sharpe
-            AND candidate_metrics.sortino >= strategy_parameters.sortino
+            candidate_metrics.roi >= portfolio_parameters.roi
+            AND candidate_metrics.sharpe >= portfolio_parameters.sharpe
+            AND candidate_metrics.sortino >= portfolio_parameters.sortino
         ) AS is_eligible
     FROM candidate_metrics
-    CROSS JOIN strategy_parameters
+    CROSS JOIN portfolio_parameters
 )
 
 SELECT
@@ -145,8 +145,8 @@ FROM (
 WHERE
     ranked_candidates.is_eligible
     AND ranked_candidates.roi_rank <= (
-        SELECT strategy_parameters.portfolio_size
-        FROM strategy_parameters
+        SELECT portfolio_parameters.portfolio_size
+        FROM portfolio_parameters
     );
 
 CREATE OR REPLACE TABLE portfolios.buy_and_hold AS
@@ -175,8 +175,8 @@ portfolio_values AS (
         sum(
             closing_price / initial_price
             / (
-                SELECT strategy_parameters.portfolio_size
-                FROM strategy_parameters
+                SELECT portfolio_parameters.portfolio_size
+                FROM portfolio_parameters
             )
         ) AS portfolio_value
     FROM test_positions

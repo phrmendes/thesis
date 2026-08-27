@@ -1,6 +1,6 @@
 -- This query builds cleaned.prices from raw.prices. The inputs are the
 -- csgotrader price data and the SteamDB sale calendar. The output is
--- cleaned.prices, which the model and strategy commands consume. The main rule
+-- cleaned.prices, which the model and portfolio commands consume. The main rule
 -- keeps weekly closing prices, drops spurious prices and the first week of each
 -- asset, and labels each week with its sale season or none.
 

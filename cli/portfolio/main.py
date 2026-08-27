@@ -3,10 +3,10 @@ from typing import Annotated
 
 from typer import Exit, Option, Typer, secho
 
-from .buy_and_hold import StrategyValidationError, buy_and_hold
+from .buy_and_hold import PortfolioValidationError, buy_and_hold
 from .constants import DEFAULT_DB_PATH, DEFAULT_ROI, DEFAULT_SHARPE, DEFAULT_SORTINO
 
-app = Typer(name="strategy", help="Portfolio strategies")
+app = Typer(name="portfolio", help="Portfolio construction")
 
 
 @app.command(name="buy-and-hold", help="Build a one-unit buy-and-hold portfolio")
@@ -19,7 +19,7 @@ def buy_and_hold_cmd(
 ) -> None:
     try:
         rows = buy_and_hold(portfolio_size, roi, sharpe, sortino, Path(db_path))
-    except StrategyValidationError as error:
+    except PortfolioValidationError as error:
         secho(str(error), fg="red")
         raise Exit(1) from None
 
