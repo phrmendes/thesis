@@ -1,89 +1,47 @@
-[project]
-name = "thesis"
-version = "1.0.0"
-requires-python = ">=3.14"
-description = "My economics bachelor's thesis (UFABC)"
-dependencies = [
-  "altair>=6.2.2",
-  "duckdb>=1.2.0",
-  "great_tables>=0.15",
-  "httpx>=0.28.1",
-  "mapie>=1.4.1",
-  "numpy>=2.4.6",
-  "orjson>=3.12.0",
-  "polars>=1.42.1",
-  "pydantic>=2",
-  "scipy>=1.18.0",
-  "sktime>=1.0.1",
-  "statsforecast>=2.0.1",
-  "tenacity>=9.1.4",
-  "typer>=0.27.0",
-  "uvloop>=0.22.1",
-  "xgboost>=3.3.0",
-]
-
-[project.scripts]
-thesis = "cli.main:app"
-
-[tool.uv]
-package = true
-
-[tool.basedpyright]
-typeCheckingMode = "recommended"
-useLibraryCodeForTypes = true
-reportAttributeAccessIssue = false
-reportUnusedCallResult = false
-reportUnknownMemberType = false
-venvPath = ".devenv/state"
-venv = "venv"
-
-[tool.setuptools.packages.find]
-include = ["cli*"]
-
 [tool.ruff]
 target-version = "py314"
 line-length = 120
 indent-width = 4
 
-[tool.sqlfluff.core]
-dialect = "duckdb"
-
 [tool.ruff.lint]
 fixable = ["ALL"]
-select = [
-  "A",
-  "ANN",
-  "ARG",
-  "B",
-  "C4",
-  "E",
-  "ERA",
-  "F",
-  "FBT",
-  "FLY",
-  "FURB",
-  "I",
-  "N",
-  "NPY",
-  "PERF",
-  "PGH",
-  "PL",
-  "PTH",
-  "RET",
-  "RUF",
-  "SIM",
-  "T10",
-  "T20",
-  "TRY",
-  "UP",
-  "W",
+select = ["ALL"]
+preview = true
+ignore = [
+  "COM812", # The formatter sets the trailing commas.
+  "CPY001", # The project has no copyright notice.
+  "D100",   # A module docstring is a file header.
 ]
-
-[tool.ruff.lint.isort]
-known-first-party = ["thesis"]
 
 [tool.ruff.format]
 quote-style = "double"
 
-[dependency-groups]
-dev = ["ty>=0.0.65"]
+[tool.marimo.runtime]
+pythonpath = ["scripts/nb"]
+
+[tool.pyrefly]
+project-includes = ["scripts", "scripts/nb"]
+search-path = ["scripts/nb"]
+python-version = "3.14"
+ignore-errors-in-generated-code = false
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/nb/helpers/*.py" = [
+  "T201", # The helpers print the path of each written file.
+]
+
+
+"scripts/nb/*.py" = [
+  "ANN001",  # A cell takes the values of the other cells as parameters.
+  "ANN201",  # A cell returns its own values as a tuple.
+  "ANN202",  # The same generated return, for a private cell.
+  "DOC201",  # The return annotation states the value.
+  "INP001",  # The notebooks are scripts, not a package.
+  "N803",    # The constants keep the names of the thesis tables.
+  "N806",    # The same names inside a cell.
+  "PLC0415", # A cell holds its own imports.
+  "PLR0913", # A cell takes one parameter per value that it reads.
+  "PLR0914", # A cell holds many locals to build the tables.
+  "PLR0917", # The same parameters, passed by position.
+  "T201",    # The notebooks print the path of each written file.
+]
