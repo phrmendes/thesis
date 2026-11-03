@@ -1,0 +1,26 @@
+[rules]
+# `polars sort-by ...$rank` fails with `cannot_spread_as_list`, and the multi-list calls change arity.
+spread_list_to_external = "off"
+# The parser accepts only the built-in shapes and compound forms: I tested 27 annotations, and 25 parse (`any`, `binary`, `bool`, `cell-path`, `closure`, `datetime`, `duration`, `error`, `filesize`, `float`, `glob`, `int`, `list`, `nothing`, `number`, `path`, `range`, `record`, `string`, `table`, `oneof<...>`, `list<...>`, `record<...>`, `table<...>`), while `block` is rejected with "blocks are not supported as values", and `polars_dataframe` and `custom` with `unknown type`.
+# A script cannot add a name: `def dataframe`, a module export used as an annotation, and `type x = y` all fail.
+missing_output_type = "off"
+# The same missing type name applies to a frame passed as an argument.
+missing_in_type = "off"
+# `def f [x: any]` still warns, so `any` cannot satisfy this rule either.
+add_type_hints_arguments = "off"
+# `format duration` writes `22.36 sec` where the stage line needs `22.4s`.
+division_to_format_duration = "off"
+# `msg` and `progress` exist to print, so raising instead would break every caller.
+error_make_for_non_fatal = "off"
+# A lone `python` call stops the command with its exit code, and `test-notebooks.nu` checks it.
+unhandled_external_error = "off"
+# A missing file already stops the command with the path, and each wrap adds six repeated lines.
+catch_builtin_error_try = "off"
+# `[1 2] | v` fails with `command doesn't support list<int> input` when `v` is variadic.
+list_param_to_variadic = "off"
+# The helpers take their data from the pipeline, and the other parameters are not pipeline data.
+positional_to_pipeline = "off"
+# Replacing `| default` with `if $flag == null` makes `if_null_to_default` warn instead.
+check_typed_flag_before_use = "off"
+# The rule asks for bare words, and the quotes are clearer across its 311 sites.
+string_may_be_bare = "off"
