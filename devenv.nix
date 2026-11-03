@@ -1,67 +1,96 @@
 {
   pkgs,
   inputs,
+  config,
   ...
 }:
 
 let
-  academic-templates =
-    inputs.academic-templates.packages.${pkgs.stdenv.hostPlatform.system}.academic-templates;
+  at = inputs.academic-templates.packages.${pkgs.stdenv.hostPlatform.system}.academic-templates;
+  python = pkgs.python314.withPackages (
+    ps: with ps; [
+      altair
+      catboost
+      great-tables
+      marimo
+      polars
+      scikit-learn
+      statsmodels
+      vl-convert-python
+      (ps.callPackage ./mapie.nix { })
+    ]
+  );
 in
 {
   name = "thesis";
 
+  env.XDG_DATA_DIRS = "${config.devenv.state}/share";
+
   languages = {
     texlive = {
       enable = true;
-      base = pkgs.texliveSmall.withPackages (ps: [ academic-templates ]);
+      base = pkgs.texliveSmall.withPackages (ps: [ at ]);
     };
     python = {
       enable = true;
-      lsp.package = pkgs.basedpyright;
-      package = pkgs.python314;
-      venv.enable = true;
-      uv = {
-        enable = true;
-        sync.enable = true;
-      };
+      lsp.package = pkgs.pyrefly;
+      package = python;
     };
   };
 
   packages = with pkgs; [
-    pandoc
-    liberation_ttf
+    (nushell.withPlugins (with nushellPlugins; [ polars ]))
+    duckdb
     gfortran
-    zlib
-    sqlfluff
     graphviz
+    gzip
+    liberation_ttf
+    nu-lint
+    pandoc
+    pyrefly
+    zlib
   ];
+
+  scripts.thesis = {
+    description = "Run the thesis pipeline. Use `thesis --help`.";
+    exec = ''exec nu "$DEVENV_ROOT/scripts/thesis.nu" "$@"'';
+  };
 
   tasks = {
     "thesis:build".exec = "pandoc --defaults pandoc.yaml thesis.md";
-    "chart:build".exec = ''
-      for source in charts/*.dot; do
-        name="$(basename "$source" .dot)"
-        dot -Tsvg "$source" -o "images/$name.svg"
-      done
-    '';
+    "thesis:lint".exec = "nu-lint scripts -c nu-lint.toml";
+    "thesis:test".exec = "nu scripts/tests/test.nu";
+    "thesis:completions" = {
+      exec = ''
+        mkdir -p "$DEVENV_STATE/share/nushell/vendor/autoload"
+        thesis completions > "$DEVENV_STATE/share/nushell/vendor/autoload/thesis.nu" || true
+      '';
+      before = [ "devenv:enterShell" ];
+    };
   };
 
   treefmt.config.programs = {
     texfmt.enable = true;
-    sqlfluff.enable = true;
   };
 
   git-hooks.hooks = {
     ripsecrets.enable = true;
     ruff.enable = true;
     ruff-format.enable = true;
-    basedpyright = {
+    pyrefly = {
       enable = true;
-      name = "basedpyright";
-      entry = "uv run basedpyright";
+      name = "pyrefly";
+      entry = "pyrefly check";
       language = "system";
       types = [ "python" ];
+      pass_filenames = false;
+    };
+    nushell = {
+      enable = true;
+      name = "nushell";
+      entry = "nu-lint scripts -c nu-lint.toml";
+      language = "system";
+      files = "\\.nu$";
       pass_filenames = false;
     };
   };
