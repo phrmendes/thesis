@@ -1,12 +1,44 @@
+import os
 from typing import TYPE_CHECKING
 
 import altair as alt
 import polars as pl
+import vl_convert as vlc
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 type ChartType = alt.Chart | alt.VConcatChart
+
+EVENTS = [{"name": "CS2", "date": "2023-03-22"}]
+VOLATILITY_WEEKS = 13
+BIN_WIDTH = 0.05
+RAW_CEILING = 5.0
+CHART_FONT = "Liberation Serif"
+FONT_DIRECTORY = os.environ.get("THESIS_FONT_DIR", "")
+PT_BR_TIME_LOCALE = {
+    "dateTime": "%A, %e de %B de %Y, %X",
+    "date": "%d/%m/%Y",
+    "time": "%H:%M:%S",
+    "periods": ["AM", "PM"],
+    "days": ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"],
+    "shortDays": ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"],
+    "months": [
+        "janeiro",
+        "fevereiro",
+        "março",
+        "abril",
+        "maio",
+        "junho",
+        "julho",
+        "agosto",
+        "setembro",
+        "outubro",
+        "novembro",
+        "dezembro",
+    ],
+    "shortMonths": ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"],
+}
 
 EVENTS = [{"name": "CS2", "date": "2023-03-22"}]
 VOLATILITY_WEEKS = 13
@@ -24,7 +56,7 @@ def coverage_chart(source: Path) -> ChartType:
             x=alt.X("week:T", title="Semana"),
             y=alt.Y("assets:Q", title="Ativos"),
         )
-        .properties(title="Ativos por semana — CS:GO", width=640, height=360)
+        .properties(width=640, height=360)
     )
 
 
@@ -64,7 +96,7 @@ def market_chart(source: Path) -> ChartType:
     return alt.vconcat(
         (index + rules).properties(width=640, height=220),
         (volatility + rules).properties(width=640, height=140),
-    ).properties(title="Mercado de itens — CS:GO")
+    )
 
 
 def returns_chart(source: Path) -> ChartType:
@@ -93,7 +125,7 @@ def returns_chart(source: Path) -> ChartType:
             y=alt.Y("itens_semana:Q", title="Itens-semana", scale=alt.Scale(type="log")),
             color=alt.Color("serie:N", title="Retorno"),
         )
-        .properties(title="Distribuição dos retornos semanais — CS:GO", width=640, height=360)
+        .properties(width=640, height=360)
     )
 
 
@@ -112,7 +144,7 @@ def build_charts(prices: Path, market: Path) -> dict[str, ChartType]:
 
 
 def write_charts(charts: dict[str, ChartType], output: Path) -> list[Path]:
-    """Write every chart as an SVG file.
+    """Write every chart as a PDF file, because lualatex cannot read an SVG.
 
     Returns:
         The path of each written file.
@@ -121,9 +153,17 @@ def write_charts(charts: dict[str, ChartType], output: Path) -> list[Path]:
     output.mkdir(parents=True, exist_ok=True)
     written = []
 
+    if FONT_DIRECTORY:
+        vlc.register_font_directory(FONT_DIRECTORY)
+
     for name, chart in charts.items():
-        path = output / f"{name}.svg"
-        chart.save(path)
+        path = output / f"{name}.pdf"
+        pdf = vlc.vegalite_to_pdf(
+            chart.to_dict(),
+            config={"font": CHART_FONT},
+            time_format_locale=PT_BR_TIME_LOCALE,
+        )
+        path.write_bytes(pdf)
         print(f"Written {path}")
         written.append(path)
 

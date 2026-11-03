@@ -30,6 +30,6 @@ thesis charts
 
 Run `thesis --help` to list the commands and their flags. The `thesis` command comes from `devenv.nix`, so run it inside `devenv shell`. Nushell completions are generated from the command signatures before the shell starts.
 
-The pipeline writes the data to `files/`, the LaTeX tables to `tex/tables/`, and the SVG charts to `images/`. `files/` is gitignored.
+The pipeline writes the data to `files/`, the LaTeX tables to `tex/tables/`, and the charts to `images/` as PDF, because `lualatex` cannot read an SVG. `files/` is gitignored.
 
 Open a notebook with `marimo edit scripts/nb/tables.py`. It reads the same flags as the command, so it runs without arguments.

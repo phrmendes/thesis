@@ -39,7 +39,7 @@ $prices_frame
 | polars with-column (polars col week | polars cast date | polars as week)
 | polars save $prices
 
-# The charts notebook writes one SVG for each chart.
+# The charts notebook writes one PDF for each chart.
 let charts = (
     python ($ROOT | path join "scripts/nb/charts.py")
     --source $prices
@@ -51,13 +51,13 @@ let charts = (
 assert equal $charts.exit_code 0
 
 for name in [coverage market returns_histogram] {
-    let path = ($output | path join $"($name).svg")
+    let path = ($output | path join $"($name).pdf")
 
     assert ($path | path exists)
     assert (((ls $path | first | get size) | into int) > 0)
 }
 
-msg $"charts notebook wrote 3 SVG files in ($work)"
+msg $"charts notebook wrote 3 PDF files in ($work)"
 
 # The model notebook stops with code 1 when the dataset is missing.
 let model = (

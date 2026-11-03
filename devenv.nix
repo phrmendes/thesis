@@ -25,6 +25,7 @@ in
   name = "thesis";
 
   env.XDG_DATA_DIRS = "${config.devenv.state}/share";
+  env.THESIS_FONT_DIR = "${pkgs.liberation_ttf}/share/fonts/truetype";
 
   languages = {
     texlive = {
