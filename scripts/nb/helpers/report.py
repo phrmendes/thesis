@@ -55,6 +55,10 @@ SOURCE_LABELS = {
 
 PERCENT_COLUMNS = ["mean", "std", "p01", "p05", "p50", "p95", "p99", "share_above_half"]
 
+TABLE_SOURCE = r"Fonte: Elaboração própria."
+CAPTION = re.compile(r"\\caption\*\{\s*\{\\large (?P<title>[^}]*)\}\s*\}")
+
+
 INTEGER_SELECTION_COLUMNS = [
     "assets",
     "selected",
@@ -125,17 +129,98 @@ def pt_values(frame: pl.DataFrame) -> pl.DataFrame:
     return frame.with_columns(pl.col("metric_value").map_elements(pt_text, return_dtype=pl.String))
 
 
+def bold_cell(cell: str) -> str:
+    """Wrap one header cell in bold, keeping a multicolumn group valid.
+
+    Returns:
+        The cell with a bold font.
+
+    """
+    body = cell.strip()
+    suffix = ""
+    while body.endswith("&"):
+        body = body[:-1].rstrip()
+        suffix = " &" + suffix
+
+    if not body or body.startswith("\\textbf"):
+        return cell
+
+    multicolumn = re.fullmatch(r"(\\multicolumn\{[^}]*\}\{[^}]*\})\{(.*)\}", body)
+    if multicolumn:
+        return f"{multicolumn.group(1)}{{\\textbf{{{multicolumn.group(2)}}}}}{suffix}"
+
+    return f"\\textbf{{{body}}}{suffix}"
+
+
+def bold_header(latex: str) -> str:
+    """Write the column names of the table in bold, as ABNT asks.
+
+    Returns:
+        The LaTeX with a bold header row.
+
+    """
+    lines = latex.split("\n")
+    header_rows = [
+        index - 1
+        for index, line in enumerate(lines)
+        if line.startswith(("\\midrule\\addlinespace", "\\cmidrule")) and index > 0
+    ]
+    for position in header_rows:
+        header = lines[position].rstrip()
+        tail = ""
+        if header.endswith("\\\\"):
+            header = header[:-2].rstrip()
+            tail = " \\\\"
+
+        if lines[position].lstrip().startswith("\\textbf"):
+            continue
+
+        cells = [bold_cell(cell) for cell in header.split(" & ")]
+        lines[position] = " & ".join(cells) + tail
+
+    return "\n".join(lines)
+
+
+def add_source(latex: str) -> str:
+    """Add the source line under the table, as ABNT asks.
+
+    Returns:
+        The LaTeX with the source line.
+
+    """
+    marker = "\\end{tabular*}"
+    if marker in latex:
+        position = latex.index(marker) + len(marker)
+    else:
+        marker = "\\end{tabular}\n}"
+        position = latex.index(marker) + len(marker)
+
+    line = "\n\\par\\vspace{\\belowcaptionskip}\\footnotesize " + TABLE_SOURCE + "\\par"
+
+    return latex[:position] + line + latex[position:]
+
+
 def write_table(table: GT, path: Path, *, wide: bool = False) -> Path:
-    """Write one great-tables table as LaTeX. A wide table shrinks to the text width when it is too wide.
+    """Write one great-tables table as LaTeX, numbered and with its source.
 
     Returns:
         The path of the written file.
 
     """
-    latex = table.as_latex()
+    latex = table.as_latex().replace("!t]", "H]", 1)
     if wide:
-        latex = TABULAR_START.sub(lambda match: f"{FIT_WIDTH}\n\\begin{{tabular}}{{{match['spec']}}}", latex)
-        latex = latex.replace(r"\end{tabular*}", "\\end{tabular}\n}")
+        if "\\begin{tabular*}" in latex:
+            latex = TABULAR_START.sub(lambda match: f"{FIT_WIDTH}\n\\begin{{tabular}}{{{match['spec']}}}", latex)
+            latex = latex.replace("\\end{tabular*}", "\\end{tabular}\n}")
+        else:
+            latex = latex.replace("\\begin{tabular}", FIT_WIDTH + "\n\\begin{tabular}", 1)
+            latex = latex.replace("\\end{tabular}", "\\end{tabular}\n}", 1)
+
+    label = f"\\label{{tab:{path.stem}}}"
+    latex = CAPTION.sub(lambda match: f"\\caption{{{match['title']}}}{label}", latex)
+    latex = bold_header(latex)
+    latex = add_source(latex)
+
     path.write_text(encoding="utf-8", data=latex)
     return path
 
@@ -207,7 +292,7 @@ def quality(source: Path) -> dict[str, GT]:
     return {
         "quality": (
             GT(stats)
-            .tab_header(title="Qualidade do Dataset Limpo — CS:GO")
+            .tab_header(title="Qualidade do Conjunto de Dados Limpo — CS:GO")
             .cols_label(metric_name="Métrica", metric_value="Valor")
         )
     }
@@ -387,7 +472,7 @@ def portfolio(source: Path) -> dict[str, GT]:
 
     table = (
         GT(frame)
-        .tab_header(title="Carteira Buy-and-Hold — CS:GO")
+        .tab_header(title="Carteira de Compra e Retenção — CS:GO")
         .cols_label(metric_name="Métrica", metric_value="Valor")
         .tab_source_note(
             "Carteira igualmente ponderada nas semanas de treino, sem rebalanceamento. "
