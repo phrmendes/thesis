@@ -5,11 +5,11 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1783812295,
+        "lastModified": 1793718812,
         "narHash": "sha256-ArkYU9DN/gI5Gk5EZi5Xjtb4IfixqhQutd6JCZ9gcQ8=",
         "owner": "phrmendes",
         "repo": "academic-templates",
-        "rev": "ee1af21f597c2880bd820e65b7ccdbaa40a6205a",
+        "rev": "0ca6c3466f6aaaf1d90e348af295aa536270e047",
         "type": "github"
       },
       "original": {
