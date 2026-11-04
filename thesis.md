@@ -35,7 +35,7 @@ link-citations: true
 
 ```{=latex}
 \input{tex/tables/coverage_daily.tex}
-\insertFigure{Ativos com preço em cada semana}{0.9}{images/coverage.pdf}{coverage}{Elaboração própria.}
+\insertFigure{Ativos com preço em cada semana}{0.9}{images/coverage.png}{coverage}{Elaboração própria.}
 \input{tex/tables/coverage_items.tex}
 \input{tex/tables/selection.tex}
 \input{tex/tables/quality.tex}
@@ -66,9 +66,9 @@ link-citations: true
 ```{=latex}
 \input{tex/tables/returns.tex}
 \input{tex/tables/distribution.tex}
-\insertFigure{Distribuição dos retornos semanais}{0.9}{images/returns_histogram.pdf}{returns}{Elaboração própria.}
+\insertFigure{Distribuição dos retornos semanais}{0.9}{images/returns_histogram.png}{returns}{Elaboração própria.}
 \input{tex/tables/dynamics.tex}
-\insertFigure{Índice do mercado e volatilidade móvel}{0.9}{images/market.pdf}{market}{Elaboração própria.}
+\insertFigure{Índice do mercado e volatilidade móvel}{0.9}{images/market.png}{market}{Elaboração própria.}
 \input{tex/tables/portfolio.tex}
 ```
 
