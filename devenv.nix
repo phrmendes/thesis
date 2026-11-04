@@ -52,14 +52,19 @@ in
     zlib
   ];
 
-  scripts.thesis = {
-    description = "Run the thesis pipeline. Use `thesis --help`.";
-    exec = ''exec nu "$DEVENV_ROOT/scripts/thesis.nu" "$@"'';
+  scripts = {
+    thesis = {
+      description = "Thesis CLI";
+      exec = ''exec nu "$DEVENV_ROOT/scripts/thesis.nu" "$@"'';
+    };
+    open-nb = {
+      description = "Open the notebooks in JupyterLab";
+      exec = ''exec jupyter lab --notebook-dir="$DEVENV_ROOT/notebooks" --ServerApp.browser="''${BROWSER:-chromium}" "$@"'';
+    };
   };
 
   tasks = {
     "thesis:build".exec = "pandoc --defaults pandoc.yaml thesis.md";
-    "thesis:nb".exec = "jupyter lab --notebook-dir=notebooks";
     "thesis:lint".exec = "nu-lint scripts -c nu-lint.toml";
     "thesis:test".exec = "nu scripts/tests/test.nu";
     "thesis:completions" = {

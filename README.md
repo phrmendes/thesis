@@ -30,4 +30,4 @@ Run `thesis --help` to list the commands and their flags. The `thesis` command c
 
 The pipeline writes the data to `files/`, the LaTeX tables to `tex/tables/`, and the charts to `images/` as PNG. `files/` is gitignored.
 
-Open the notebooks with `devenv tasks run thesis:nb`. The task serves `notebooks` in JupyterLab, where a `.py` file opens as a notebook. Each notebook reads the same flags as its command, so it runs without arguments.
+Open the notebooks with `open-nb`. The script serves `notebooks` in JupyterLab, where a `.py` file opens as a notebook. Each notebook reads the same flags as its command, so it runs without arguments.
