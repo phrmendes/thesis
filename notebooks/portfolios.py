@@ -1,20 +1,21 @@
 # %% [markdown]
 # # Carteira de compra e retenção dos itens CS:GO
 #
-# Seleciona os itens pelos dados de treino, mantém a carteira nas semanas de teste,
-# calcula ROI, Sharpe e Sortino semanais e exporta a tabela LaTeX.
+# A carteira de compra e retenção é a referência de desempenho mais simples. Este caderno mede se
+# escolher itens pelo treino gera retorno líquido no teste. O resultado serve de base de comparação
+# para o modelo.
 
 # %%
 from argparse import ArgumentParser
 from pathlib import Path
 
-import polars as pl
 from great_tables import GT
 from helpers.formatting import metric_text_table, write_latex_table
 from helpers.params import load_params
 from helpers.paths import repo
 from helpers.portfolio import eligible_assets, hold_positions, portfolio_returns, portfolio_summary, training_candidates
 from helpers.runtime import notebook_arguments
+from helpers.schemas import read_table
 
 # %%
 PORTFOLIO_LABELS = {
@@ -34,7 +35,6 @@ PORTFOLIO_FORMATS = {
     "sharpe": ".2f",
     "sortino": ".2f",
 }
-
 
 # %% [markdown]
 # ## Argumentos da linha de comando
@@ -65,19 +65,29 @@ if args.k < 1:
 
 # %% [markdown]
 # ## Selecionar itens elegíveis nas semanas de treino
+#
+# A seleção usa apenas as semanas de treino. Isso impede que informação do período de teste influencie
+# a carteira. Só entram itens com preço na primeira semana de teste, pois só eles podem ser comprados.
 
 # %%
-prices = pl.read_parquet(args.prices).sort("name", "week")
+prices = read_table("prices", args.prices).sort("name", "week")
 thresholds = {"roi": args.roi, "sharpe": args.sharpe, "sortino": args.sortino}
 selected = eligible_assets(training_candidates(prices), args.k, args.rank, thresholds)
 selected
 
 # %% [markdown]
 # ## Manter a carteira nas semanas de teste e medir o desempenho
+#
+# A carteira mantém os itens escolhidos sem rebalanceamento. O item que deixa de ter preço mantém o
+# último valor. Assim a carteira não inventa retornos nem encerra a posição antes do fim.
 
 # %%
 rows = portfolio_returns(hold_positions(prices, selected.select("name"), args.k))
 rows
+
+# %% [markdown]
+# ROI, Sharpe e Sortino semanais resumem o desempenho. A taxa de venda de 15% entra uma só vez, na
+# última semana, porque a estratégia vende apenas no final.
 
 # %%
 metrics = portfolio_summary(rows, args.k)
@@ -104,6 +114,9 @@ portfolio_gt
 
 # %% [markdown]
 # ## Exportar a carteira em Parquet e a tabela em LaTeX
+#
+# As linhas semanais e o resumo ficam em Parquet para análises posteriores. A tabela em LaTeX é
+# gravada junto, para que a tese use resultados da mesma execução.
 
 # %%
 for path in (args.buy_and_hold, args.output, args.table):

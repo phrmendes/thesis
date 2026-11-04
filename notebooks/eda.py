@@ -1,8 +1,9 @@
 # %% [markdown]
 # # Análise exploratória dos preços de itens CS:GO
 #
-# Lê os preços semanais limpos, audita a limpeza, calcula as tabelas da EDA, mostra cada resultado
-# e exporta as tabelas LaTeX e os gráficos PNG.
+# Antes de qualquer modelo, a tese precisa mostrar que os preços limpos são confiáveis e descrever
+# como eles se comportam. Este caderno audita a limpeza, resume retornos, mercado, fontes e liquidez,
+# e gera as tabelas e os gráficos que a tese cita.
 
 # %%
 from argparse import ArgumentParser
@@ -20,10 +21,8 @@ from helpers.params import load_params
 from helpers.paths import repo
 from helpers.returns import RETURN_COLUMNS, return_distribution, return_statistics
 from helpers.runtime import notebook_arguments
+from helpers.schemas import read_table
 from helpers.sources import source_comparison
-
-# %% [markdown]
-# ## Rótulos e formatos das tabelas
 
 # %%
 WIDE_TABLES = frozenset({"returns", "distribution", "selection", "sources"})
@@ -114,9 +113,11 @@ INTEGER_SELECTION_COLUMNS = [
     "no_training_data",
 ]
 
-
 # %% [markdown]
 # ## Argumentos da linha de comando
+#
+# Os caminhos têm valores padrão a partir da raiz do repositório. Por isso o mesmo caderno roda no
+# JupyterLab sem argumentos e no terminal com argumentos validados.
 
 # %%
 parser = ArgumentParser(description="EDA: calcula, mostra e exporta as tabelas e os gráficos.")
@@ -129,11 +130,14 @@ args = parser.parse_args(notebook_arguments())
 
 # %% [markdown]
 # ## Carregar dados e auditar a limpeza
+#
+# A auditoria compara cada etapa da limpeza com a tabela semanal final. Ela mostra quantas linhas e
+# quantos ativos cada filtro remove, e responde se a limpeza muda a amostra além do esperado.
 
 # %%
-prices = pl.read_parquet(args.prices)
-assets = pl.read_parquet(args.assets)
-audit = audit_metrics(pl.read_parquet(args.audit), prices)
+prices = read_table("prices", args.prices)
+assets = read_table("assets", args.assets)
+audit = audit_metrics(read_table("audit", args.audit), prices)
 audit
 
 # %% [markdown]
@@ -143,9 +147,17 @@ audit
 coverage = coverage_daily(prices, audit)
 coverage
 
+# %% [markdown]
+# Itens com poucas semanas de preço geram estatísticas instáveis. A persistência mostra quantos itens
+# têm histórico longo e quantos chegam à seleção.
+
 # %%
 persistence = coverage_items(assets)
 persistence
+
+# %% [markdown]
+# A seleção depende só do treino. Agrupar por primeira observação mostra se a exclusão atinge períodos
+# de lançamento específicos, o que criaria viés de sobrevivência.
 
 # %%
 groups = launch_period_groups(assets)
@@ -157,10 +169,18 @@ quality
 
 # %% [markdown]
 # ## Analisar retornos, distribuição e dinâmica do mercado
+#
+# As estatísticas por item mostram risco e retorno semanais. Só entram no ranking os itens com semanas
+# suficientes, para que poucos pontos não dominem a lista. As linhas Restante e Geral mantêm os demais
+# itens na conta.
 
 # %%
 returns = return_statistics(prices)
 returns
+
+# %% [markdown]
+# Comparar o retorno limitado com o bruto mostra o efeito do limite de ±100% sobre a média e o desvio
+# padrão. Também revela caudas pesadas.
 
 # %%
 distribution = return_distribution(prices)
@@ -170,16 +190,27 @@ distribution
 market = market_series(prices)
 market
 
+# %% [markdown]
+# Autocorrelação, correlação com o mercado e testes ADF dizem se os retornos são previsíveis e se a
+# série do mercado é estacionária. Esses resultados condicionam a escolha do modelo.
+
 # %%
 dynamics = market_dynamics(prices, market)
 dynamics
 
 # %% [markdown]
 # ## Comparar fontes de preço e atividade de mercado
+#
+# O preço principal vem da Steam. Compará-lo com outras fontes mostra se as conclusões dependem da
+# fonte escolhida.
 
 # %%
 sources = source_comparison(prices)
 sources
+
+# %% [markdown]
+# Os dias com venda por semana medem a liquidez. Semanas com poucos dias indicam preços em que se deve
+# confiar menos.
 
 # %%
 activity = activity_summary(prices)
@@ -207,6 +238,7 @@ coverage_gt
 # %%
 persistence_gt = (
     GT(persistence)
+    .cols_align("left", columns="weeks_range")
     .tab_header(title="Persistência dos Itens — CS:GO")
     .fmt_integer(columns=["universe_assets", "selected_assets"], sep_mark=SEP_MARK)
     .cols_label(
@@ -224,6 +256,7 @@ persistence_gt
 # %%
 groups_gt = (
     GT(groups)
+    .cols_align("left", columns="launch_period")
     .tab_header(title="Seleção dos Itens por Primeira Observação — CS:GO")
     .fmt_integer(columns=INTEGER_SELECTION_COLUMNS, sep_mark=SEP_MARK)
     .cols_label(
@@ -258,9 +291,13 @@ quality_gt
 
 # %% [markdown]
 # ### Estatísticas dos retornos semanais
+#
+# Esta tabela apresenta retorno e risco por item e no agregado. As razões de Sharpe e Sortino ficam
+# semanais, sem anualização, porque a autocorrelação dos retornos invalida a regra da raiz quadrada.
 
 # %%
 returns_text = returns.with_columns(pl.col("name").replace(LABEL_MAP))
+# The last two rows pool the remaining assets and all assets. Their week count is an average, not a whole number.
 asset_rows = list(range(returns_text.height - 2))
 pooled_rows = [returns_text.height - 2, returns_text.height - 1]
 
@@ -298,7 +335,9 @@ returns_gt
 # ### Distribuição dos retornos semanais
 
 # %%
-distribution_text = distribution.with_columns(pl.col("label").replace(DISTRIBUTION_LABELS))
+distribution_text = distribution.with_columns(
+    pl.col("label").replace_strict(DISTRIBUTION_LABELS, return_dtype=pl.String)
+)
 
 distribution_gt = (
     GT(distribution_text)
@@ -375,7 +414,7 @@ dynamics_gt
 # ### Comparação entre preços Steam, csgotrader e BUFF
 
 # %%
-sources_text = sources.with_columns(pl.col("source").replace(SOURCE_LABELS))
+sources_text = sources.with_columns(pl.col("source").replace_strict(SOURCE_LABELS, return_dtype=pl.String))
 
 sources_gt = (
     GT(sources_text)
@@ -405,6 +444,7 @@ sources_gt
 # %%
 activity_gt = (
     GT(activity)
+    .cols_align("left", columns="active_bucket")
     .tab_header(title="Dias com Venda na Steam por Semana — CS:GO")
     .fmt_integer(columns=["item_weeks"], sep_mark=SEP_MARK)
     .cols_label(active_bucket="Dias com preço de 24 horas", item_weeks="Itens-semana")
@@ -433,6 +473,10 @@ coverage_figure
 
 # %% [markdown]
 # ### Índice de mercado e volatilidade móvel
+#
+# A linha vermelha marca o evento do CS2 que pode mudar o regime de preços. A volatilidade móvel
+# mostra os períodos de instabilidade em torno desse evento. A escala logarítmica do índice torna
+# iguais as variações percentuais iguais.
 
 # %%
 chart_params = load_params()["charts"]
@@ -441,6 +485,7 @@ event_frame = pl.DataFrame(chart_params["events"]).with_columns(pl.col("date").s
 event_rules = alt.Chart(event_frame).mark_rule(color="red", strokeDash=[4, 4]).encode(x="date:T")
 volatility_title = f"Desvio padrão ({chart_params['volatility_weeks']} semanas)"
 
+# The log scale gives equal percent moves the same height.
 index_line = (
     alt.Chart(market_weekly)
     .mark_line()
@@ -464,9 +509,13 @@ market_figure
 
 # %% [markdown]
 # ### Histograma dos retornos semanais
+#
+# A escala logarítmica mantém visíveis as caudas raras. O teto do eixo para o retorno bruto evita que
+# poucos valores extremos escondam o centro da distribuição.
 
 # %%
 bin_width = chart_params["bin_width"]
+# Cap the raw return at the chart ceiling so a few extreme values do not hide the center.
 raw_returns = prices["raw_return"].clip(upper_bound=chart_params["raw_ceiling"])
 return_series = {"Limitado": prices["return"], "Bruto": raw_returns}
 
@@ -494,6 +543,9 @@ returns_figure
 
 # %% [markdown]
 # ## Exportar tabelas LaTeX e gráficos PNG
+#
+# Tabelas e gráficos são gravados somente neste passo. Gravar tudo de uma vez garante que a tese use
+# resultados da mesma execução.
 
 # %%
 tables = {

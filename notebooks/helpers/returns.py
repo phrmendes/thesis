@@ -24,6 +24,8 @@ RETURN_TABLE_COLUMNS = [
 
 TOP_ASSETS = 10
 
+DISTRIBUTION_TYPE = pl.Enum(["capped", "raw"])
+
 
 def return_summary() -> list[pl.Expr]:
     """Build the summary expressions of the weekly return.
@@ -64,7 +66,7 @@ def pooled_return_row(prices: pl.DataFrame, name: str) -> pl.DataFrame:
         One row with the pooled return statistics.
 
     """
-    weeks_per_asset = (pl.len() / pl.col("name").n_unique()).cast(pl.Float64).alias("n_weeks")
+    weeks_per_asset = (pl.len() / pl.col("name").n_unique()).alias("n_weeks")
     pooled = prices.select(*return_summary(), weeks_per_asset)
 
     return with_return_ratios(pooled).with_columns(pl.lit(name).alias("name"))
@@ -77,7 +79,7 @@ def asset_return_rows(prices: pl.DataFrame, min_weeks: int) -> pl.DataFrame:
         One ranked row per asset.
 
     """
-    weeks = pl.col("return").count().cast(pl.Float64).alias("n_weeks")
+    weeks = pl.col("return").count().alias("n_weeks")
     summary = prices.group_by("name").agg(*return_summary(), weeks)
     ranked = with_return_ratios(summary).filter(pl.col("n_weeks") >= min_weeks)
     rank = (pl.int_range(pl.len()) + 1).alias("rank_n")
@@ -112,7 +114,7 @@ def distribution_row(prices: pl.DataFrame, column: str, label: str) -> pl.DataFr
     share_above_half = (returns.abs() > 0.5).mean().alias("share_above_half")
 
     return prices.select(
-        pl.lit(label).alias("label"),
+        pl.lit(label, dtype=DISTRIBUTION_TYPE).alias("label"),
         pl.len().alias("n"),
         returns.mean().alias("mean"),
         returns.std().alias("std"),

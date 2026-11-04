@@ -1,11 +1,10 @@
 import polars as pl
 from helpers.frames import bucket_label, with_empty_buckets
+from helpers.schemas import SELECTION_REASONS
 
 WEEK_BUCKET_LABELS = ("< 25", "25-49", "50-74", "75-99", "100-124", "125+")
 
 WEEK_BUCKET_BREAKS = (24, 49, 74, 99, 124)
-
-SELECTION_REASONS = ("selected", "low_price", "few_observations", "no_training_data")
 
 
 def coverage_weekly(prices: pl.DataFrame) -> pl.DataFrame:
@@ -85,12 +84,14 @@ def launch_period_groups(assets: pl.DataFrame) -> pl.DataFrame:
         One row per launch period with the reason counts.
 
     """
-    year = pl.col("first_week").dt.year().cast(pl.String)
-    half = ((pl.col("first_week").dt.month() - 1) // 6 + 1).cast(pl.String)
+    year = pl.col("first_week").dt.year()
+    half = (pl.col("first_week").dt.month() - 1) // 6 + 1
     launch_period = pl.concat_str(year, pl.lit("-H"), half).alias("launch_period")
     reason_counts = [(pl.col("reason") == reason).sum().alias(reason) for reason in SELECTION_REASONS]
 
-    return assets.group_by(launch_period).agg(pl.len().alias("assets"), *reason_counts).sort("launch_period")
+    grouped = assets.group_by(launch_period).agg(pl.len().alias("assets"), *reason_counts).sort("launch_period")
+
+    return grouped.with_columns(pl.col("launch_period").cast(pl.Categorical))
 
 
 def quality_metrics(prices: pl.DataFrame) -> pl.DataFrame:

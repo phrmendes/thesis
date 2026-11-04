@@ -3,6 +3,8 @@ from helpers.params import load_params
 
 EXPENSIVE_PRICE = 800
 
+SOURCE_TYPE = pl.Enum(["composite", "composite_800", "buff"])
+
 
 def source_return(column: str) -> pl.Expr:
     """Build the capped weekly return of one source close.
@@ -28,7 +30,7 @@ def source_row(prices: pl.DataFrame, column: str, label: str) -> pl.DataFrame:
     observed = prices.filter(is_observed)
     week_share = (pl.col(column).count() / pl.len()).fill_nan(None).alias("week_share")
     price_ratio = (pl.col("price") / pl.col(column)).median().alias("median_ratio")
-    totals = observed.select(pl.lit(label).alias("source"), week_share, price_ratio)
+    totals = observed.select(pl.lit(label, dtype=SOURCE_TYPE).alias("source"), week_share, price_ratio)
     returns = prices.with_columns(source_return(column)).filter(is_observed & pl.col("source_return").is_not_null())
     correlation = pl.corr("return", "source_return").fill_nan(None).alias("return_correlation")
     pairs = returns.select(correlation, pl.len().alias("pairs"))
