@@ -2,7 +2,7 @@ const PARAMS_PATH = (
     path self
     | path dirname
     | path dirname
-    | path join "params.nuon"
+    | path join "params.toml"
 )
 
 # Return the tunable values as one record.

@@ -1,0 +1,91 @@
+[collection]
+first_date = "2020-11-02"
+last_date = "2023-10-30"
+
+[clean]
+# Weekly returns are winsorized between minus this value and this value.
+return_cap = 1.0
+# Share of the weeks after the first price week used for training.
+training_share = 0.7
+# The daily price must stay within these multiples of the training median.
+min_price_multiple = 0.05
+max_price_multiple = 20.0
+# The asset filter uses the training weeks only.
+min_mean_price = 1.0
+min_observations = 350
+max_stale_weeks = 4
+# A run of identical daily prices longer than this is a stale price.
+max_unchanged_days = 28
+
+[eda]
+item_min_weeks = 100
+
+[charts]
+# Window of the rolling standard deviation in the market chart.
+volatility_weeks = 13
+# Width of one return bucket in the histogram.
+bin_width = 0.05
+# Highest raw return that the histogram draws.
+raw_ceiling = 5.0
+
+[[charts.events]]
+name = "CS2"
+date = "2023-03-22"
+
+[portfolio]
+# 5% Steam plus 10% game fee, kept from the final sale.
+net_sale_share = 0.85
+min_roi = 0.05
+min_sharpe = 0.10
+min_sortino = 0.20
+
+# From SteamDB. A week counts when it touches a period.
+[[sale_periods]]
+season = "autumn"
+start = "2020-11-25"
+end = "2020-12-01"
+
+[[sale_periods]]
+season = "winter"
+start = "2020-12-22"
+end = "2021-01-05"
+
+[[sale_periods]]
+season = "summer"
+start = "2021-06-24"
+end = "2021-07-08"
+
+[[sale_periods]]
+season = "autumn"
+start = "2021-11-24"
+end = "2021-12-01"
+
+[[sale_periods]]
+season = "winter"
+start = "2021-12-22"
+end = "2022-01-05"
+
+[[sale_periods]]
+season = "summer"
+start = "2022-06-23"
+end = "2022-07-07"
+
+[[sale_periods]]
+season = "autumn"
+start = "2022-11-22"
+end = "2022-11-29"
+
+[[sale_periods]]
+season = "winter"
+start = "2022-12-22"
+end = "2023-01-05"
+
+[[sale_periods]]
+season = "spring"
+start = "2023-03-16"
+end = "2023-03-23"
+
+[[sale_periods]]
+season = "summer"
+start = "2023-06-29"
+end = "2023-07-13"

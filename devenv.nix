@@ -12,7 +12,9 @@ let
       altair
       catboost
       great-tables
-      marimo
+      ipython
+      jupyterlab
+      jupytext
       polars
       scikit-learn
       statsmodels
@@ -25,7 +27,6 @@ in
   name = "thesis";
 
   env.XDG_DATA_DIRS = "${config.devenv.state}/share";
-  env.THESIS_FONT_DIR = "${pkgs.liberation_ttf}/share/fonts/truetype";
 
   languages = {
     texlive = {
@@ -45,7 +46,6 @@ in
     gfortran
     graphviz
     gzip
-    liberation_ttf
     nu-lint
     pandoc
     pyrefly
@@ -59,6 +59,7 @@ in
 
   tasks = {
     "thesis:build".exec = "pandoc --defaults pandoc.yaml thesis.md";
+    "thesis:nb".exec = "jupyter lab --notebook-dir=notebooks";
     "thesis:lint".exec = "nu-lint scripts -c nu-lint.toml";
     "thesis:test".exec = "nu scripts/tests/test.nu";
     "thesis:completions" = {

@@ -124,6 +124,39 @@ export def clean-stages [raw, --min-mean-price: float, --min-observations: int]:
         | select-assets --min-mean-price $min_mean_price --min-observations $min_observations
     )
 
+    let valid = ($daily | valid-daily-prices $selected $training)
+
+    let is_valid = (
+        $valid
+        | polars select name date
+        | polars with-column (polars lit true | polars as valid)
+    )
+    let is_selected = (
+        $selected
+        | polars select name
+        | polars unique
+        | polars with-column (polars lit true | polars as selected)
+    )
+    let is_positive = (polars col positive)
+    let audit = (
+        $raw
+        | polars with-column (polars col date | polars truncate 1w | polars as week)
+        | polars with-column (((polars col price | polars is-not-null)) and ((polars col price) > 0) | polars as positive)
+        | polars join $is_selected name name --left
+        | polars join $is_valid [name date] [name date] --left
+        | polars with-column (
+            polars when ($is_positive and (polars col selected | polars is-not-null)) true
+            | polars otherwise false
+            | polars as selected
+        )
+        | polars with-column (
+            polars when ((polars col valid | polars is-null)) false
+            | polars otherwise (polars col valid)
+            | polars as valid
+        )
+        | polars select name date week price steam_24h positive selected valid
+    )
+
     {
         raw: $raw
         min_mean_price: $min_mean_price
@@ -133,7 +166,8 @@ export def clean-stages [raw, --min-mean-price: float, --min-observations: int]:
         periods: $periods
         training: $training
         selected: $selected
-        valid: ($daily | valid-daily-prices $selected $training)
+        valid: $valid
+        audit: $audit
     }
 }
 

@@ -4,3 +4,5 @@
 __pycache__
 .pre-commit-config.yaml
 files/
+*.ipynb
+notebooks/.ipynb_checkpoints

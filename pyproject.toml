@@ -16,32 +16,29 @@ ignore = [
 [tool.ruff.format]
 quote-style = "double"
 
-[tool.marimo.runtime]
-pythonpath = ["scripts/nb"]
-
 [tool.pyrefly]
-project-includes = ["scripts", "scripts/nb"]
-search-path = ["scripts/nb"]
+preset = "strict"
+project-includes = ["notebooks"]
+search-path = ["notebooks"]
 python-version = "3.14"
 ignore-errors-in-generated-code = false
 
 [tool.ruff.lint.per-file-ignores]
-"scripts/nb/helpers/*.py" = [
-  "T201", # The helpers print the path of each written file.
+"notebooks/*.py" = [
+  "B018", # A notebook cell ends with a bare expression that Jupyter displays.
+]
+"notebooks/**/*" = [
+  "INP001",   # The notebooks are scripts, not a package.
+  "PT009",    # The tests use the unittest assertions.
+  "PT027",    # The tests use the unittest assertions.
+  "D101",     # A test class name says what it covers.
+  "D102",     # A test method name says what it checks.
+  "D104",     # A test package needs no docstring.
+  "PLR2004",  # The tests compare hand-computed values.
+  "DTZ001",   # The test dates carry no timezone.
+  "T201",     # The notebooks print the path of each written file.
+  "RUF069",   # A weekly return of exactly zero is a real observation, not float noise.
 ]
 
-
-"scripts/nb/*.py" = [
-  "ANN001",  # A cell takes the values of the other cells as parameters.
-  "ANN201",  # A cell returns its own values as a tuple.
-  "ANN202",  # The same generated return, for a private cell.
-  "DOC201",  # The return annotation states the value.
-  "INP001",  # The notebooks are scripts, not a package.
-  "N803",    # The constants keep the names of the thesis tables.
-  "N806",    # The same names inside a cell.
-  "PLC0415", # A cell holds its own imports.
-  "PLR0913", # A cell takes one parameter per value that it reads.
-  "PLR0914", # A cell holds many locals to build the tables.
-  "PLR0917", # The same parameters, passed by position.
-  "T201",    # The notebooks print the path of each written file.
-]
+[tool.jupytext]
+formats = "ipynb,py:percent"

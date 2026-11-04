@@ -1,4 +1,3 @@
-use ./lib/audit.nu [cleaning-audit]
 use ./lib/clean.nu [
     asset-universe
     clean-stages
@@ -9,31 +8,17 @@ use ./lib/clean.nu [
 ]
 use ./lib/completions.nu [extern-text]
 use ./lib/constants.nu [ITEMS_PATH PRICES_PATH RAW_DIR]
-use ./lib/eda.nu [
-    activity-summary
-    coverage-daily
-    coverage-items
-    launch-period-groups
-    market-dynamics
-    market-series
-    quality-metrics
-    return-distribution
-    return-statistics
-    source-comparison
-]
 use ./lib/fetch.nu [fetch-day fetch-items items-rarity snapshot-files summarize-statuses]
-use ./lib/helpers.nu [fail metric-record one-row]
+use ./lib/helpers.nu [fail one-row]
 use ./lib/output.nu [debug-mode msg progress timed]
 use ./lib/params.nu [load-params]
-use ./lib/portfolio.nu [buy-and-hold portfolio-summary]
 use ./lib/stats.nu [save-table]
 
 const DEFAULT_CONCURRENCY = 10
 const FETCH_BATCH_SIZE = 50
-const FILES_DIR = "files"
+const NOTEBOOKS_DIR = (path self | path dirname | path dirname | path join "notebooks")
 const AUDIT_PATH = "files/audit.parquet"
 const ASSETS_PATH = "files/assets.parquet"
-const MARKET_PATH = "files/market.parquet"
 const PORTFOLIO_PATH = "files/portfolio.parquet"
 const BUY_AND_HOLD_PATH = "files/buy_and_hold.parquet"
 const DATASET_PATH = "files/dataset.parquet"
@@ -48,8 +33,8 @@ export def main []: nothing -> nothing {
 
 # Download CS:GO price snapshots and item metadata.
 export def --env "main data fetch" [
-    --start: string  # First day to fetch, as YYYY-MM-DD. Default: collection.first_date in params.nuon.
-    --end: string  # Last day to fetch, as YYYY-MM-DD. Default: collection.last_date in params.nuon.
+    --start: string  # First day to fetch, as YYYY-MM-DD. Default: collection.first_date in params.toml.
+    --end: string  # Last day to fetch, as YYYY-MM-DD. Default: collection.last_date in params.toml.
     --data-dir: path = $RAW_DIR  # Folder for the raw snapshots.
     --concurrency: int = $DEFAULT_CONCURRENCY  # Number of parallel downloads.
     --force  # Download again even when a snapshot is cached.
@@ -129,21 +114,19 @@ export def --env "main data clean" [
         fail $"no snapshots in ($raw_dir): run 'thesis data fetch' first" $raw_dir --label "raw directory"
     }
 
-    let raw = $files | timed "load snapshots" --step 1 --of 7 {|files| load-snapshots $files }
+    let raw = $files | timed "load snapshots" --step 1 --of 6 {|files| load-snapshots $files }
     let stages = (clean-stages $raw)
 
     let cleaned = (
         $stages
-        | timed "build prices" --step 2 --of 7 {|stages|
+        | timed "build prices" --step 2 --of 6 {|stages|
             cleaned-prices $stages --items (items-rarity) | polars collect
         }
     )
 
-    let audit = $stages | timed "audit" --step 3 --of 7 {|stages| cleaning-audit $stages $cleaned }
-
     let assets = (
         $stages
-        | timed "assets" --step 4 --of 7 {|stages| asset-universe $stages | polars collect }
+        | timed "assets" --step 3 --of 6 {|stages| asset-universe $stages | polars collect }
     )
 
     let rows = (
@@ -153,11 +136,11 @@ export def --env "main data clean" [
         | get rows
     )
 
-    $cleaned | timed "save prices" --step 5 --of 7 {|frame| $frame | save-table $output }
+    $cleaned | timed "save prices" --step 4 --of 6 {|frame| $frame | save-table $output }
 
-    $audit | timed "save audit" --step 6 --of 7 {|rows| $rows | save-table $AUDIT_PATH }
+    $stages.audit | timed "save audit" --step 5 --of 6 {|frame| $frame | save-table $AUDIT_PATH }
 
-    $assets | timed "save assets" --step 7 --of 7 {|rows| $rows | save-table $ASSETS_PATH }
+    $assets | timed "save assets" --step 6 --of 6 {|frame| $frame | save-table $ASSETS_PATH }
 
     try {
         rm --force ...$files
@@ -165,126 +148,44 @@ export def --env "main data clean" [
         msg --level warn $"Could not remove the raw snapshots: ($err.msg)"
     }
 
-    let summary = $audit | metric-record
-
     msg --level done $"Built ($output) with ($rows) rows"
-
-    msg $"Observed share ($summary.observed_share), zero returns ($summary.zero_returns), capped returns ($summary.capped_returns)"
-
-    msg $"Weekly jumps ($summary.weekly_jumps), reversed ($summary.reversed_jumps), bounds removed ($summary.bounds_removed_rows) daily rows"
-
-    let last_date = ((load-params).collection.last_date)
-
-    if $summary.last_price_day < $last_date {
-        msg --level warn $"prices end at ($summary.last_price_day), before ($last_date)"
-    }
 }
 
-# Build every EDA summary table.
-export def --env "main eda" [
+# Run the EDA notebook: calculate, display, and export the tables and the charts.
+export def "main eda" [
     --debug  # Write debug messages to /tmp/thesis/log.txt.
 ]: nothing -> nothing {
     debug-mode $debug
 
-    let prices = (load-prices)
-    let assets = (load-table $ASSETS_PATH "thesis data clean")
-    let audit = load-table $AUDIT_PATH "thesis data clean" | polars into-nu | metric-record
-    let market = (market-series $prices)
+    let prices_text = $PRICES_PATH | into string
+    let assets_text = $ASSETS_PATH | into string
+    let audit_text = $AUDIT_PATH | into string
+    let tables_text = $TABLES_DIR | into string
+    let images_text = $IMAGES_DIR | into string
 
-    let plan = [
-        {
-            name: "coverage_daily"
-            build: {|| coverage-daily $prices $audit }
-        }
-        {
-            name: "coverage_items"
-            build: {|| coverage-items $assets }
-        }
-        {
-            name: "selection"
-            build: {|| launch-period-groups $assets }
-        }
-        {
-            name: "quality"
-            build: {|| quality-metrics $prices }
-        }
-        {
-            name: "returns"
-            build: {|| return-statistics $prices }
-        }
-        {
-            name: "distribution"
-            build: {|| return-distribution $prices }
-        }
-        {
-            name: "dynamics"
-            build: {|| market-dynamics $prices $market }
-        }
-        {
-            name: "market"
-            build: {|| $market }
-        }
-        {
-            name: "sources"
-            build: {|| source-comparison $prices }
-        }
-        {
-            name: "activity"
-            build: {|| activity-summary $prices }
-        }
-    ]
-
-    let total = $plan | length
-
-    $plan
-    | enumerate
-    | each {|row|
-        let table = (
-            timed $row.item.name --step ($row.index + 1) --of $total {|| do $row.item.build }
-        )
-
-        $table | save-table $"($FILES_DIR)/($row.item.name).parquet"
-    }
-
-    msg --level done $"Written EDA tables in ($FILES_DIR)"
+    python ($NOTEBOOKS_DIR | path join "eda.py") --prices $prices_text --assets $assets_text --audit $audit_text --tables $tables_text --images $images_text
 }
 
-# Build an equal-weight buy-and-hold portfolio for one portfolio size.
+# Build an equal-weight buy-and-hold portfolio.
 export def --env "main portfolio buy-and-hold" [
     --k: int  # Number of assets in the portfolio. Required.
     --rank: string = "roi"  # Training ratio that orders the assets: roi, sharpe or sortino.
-    --roi: float  # Minimum training ROI. Default: portfolio.min_roi in params.nuon.
-    --sharpe: float  # Minimum training Sharpe ratio. Default: portfolio.min_sharpe in params.nuon.
-    --sortino: float  # Minimum training Sortino ratio. Default: portfolio.min_sortino in params.nuon.
+    --roi: float  # Minimum training ROI. Default: portfolio.min_roi in params.toml.
+    --sharpe: float  # Minimum training Sharpe ratio. Default: portfolio.min_sharpe in params.toml.
+    --sortino: float  # Minimum training Sortino ratio. Default: portfolio.min_sortino in params.toml.
     --debug  # Write debug messages to /tmp/thesis/log.txt.
 ]: nothing -> nothing {
     debug-mode $debug
 
-    let book = (load-params).portfolio
-    let roi_threshold = $roi | default $book.min_roi
-    let sharpe_threshold = $sharpe | default $book.min_sharpe
-    let sortino_threshold = $sortino | default $book.min_sortino
-
-    let rows = (
-        load-prices
-        | buy-and-hold --k $k --rank $rank --roi $roi_threshold --sharpe $sharpe_threshold
-            --sortino $sortino_threshold
+    let flags = (
+        {roi: $roi, sharpe: $sharpe, sortino: $sortino}
+        | transpose name value
+        | where value != null
+        | each {|row| [$"--($row.name)" ($row.value | into string)] }
+        | flatten
     )
 
-    let summary = (portfolio-summary $rows --assets $k)
-
-    $rows
-    | polars into-df
-    | polars with-column (polars col week | polars cast date | polars as week)
-    | save-table $BUY_AND_HOLD_PATH
-
-    $summary | save-table $PORTFOLIO_PATH
-
-    let metrics = $summary | metric-record
-
-    msg --level done $"Built ($BUY_AND_HOLD_PATH) with ($rows | length) weeks"
-
-    msg $"ROI ($metrics.roi), Sharpe ($metrics.sharpe), Sortino ($metrics.sortino)"
+    python ($NOTEBOOKS_DIR | path join "portfolios.py") --prices $PRICES_PATH --k $k --rank $rank ...$flags --buy-and-hold $BUY_AND_HOLD_PATH --output $PORTFOLIO_PATH --table ($TABLES_DIR | path join "portfolio.tex")
 }
 
 # Print the Nushell completion for the commands.
@@ -295,34 +196,10 @@ export def "main completions" []: nothing -> nothing {
     print $text
 }
 
-# Render the LaTeX tables from the EDA parquet files.
-export def "main tables" [
-    source: path = $FILES_DIR  # Folder with the EDA parquet tables.
-    output: path = $TABLES_DIR  # Folder for the LaTeX files.
-]: nothing -> nothing {
-    let source_text = $source | into string
-    let output_text = $output | into string
-
-    python scripts/nb/tables.py --source $source_text --output $output_text
-}
-
-# Render the SVG charts from the cleaned prices and the market series.
-export def "main charts" [
-    source: path = $PRICES_PATH  # Cleaned weekly prices.
-    --market: path = $MARKET_PATH  # Market series from `eda`.
-    --output: path = $IMAGES_DIR  # Folder for the SVG files.
-]: nothing -> nothing {
-    let source_text = $source | into string
-    let market_text = $market | into string
-    let output_text = $output | into string
-
-    python scripts/nb/charts.py --source $source_text --market $market_text --output $output_text
-}
-
 # Fit the CatBoost model and write the conformal predictions. This is a skeleton.
 export def "main model fit" []: nothing -> nothing {
     let dataset_text = $DATASET_PATH | into string
     let output_text = $PREDICTIONS_PATH | into string
 
-    python scripts/nb/model.py --dataset $dataset_text --output $output_text
+    python ($NOTEBOOKS_DIR | path join "models.py") --dataset $dataset_text --output $output_text
 }

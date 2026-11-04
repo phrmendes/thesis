@@ -13,9 +13,9 @@ My economics bachelor's thesis (UFABC)!
 
 # Data pipeline
 
-Nushell builds the data. Python renders the tables and the charts.
+Nushell fetches and cleans the data. Python audits the cleaning, runs the EDA and the portfolio, and renders the tables and the charts.
 
-`scripts/thesis.nu` holds the commands. `scripts/params.nuon` holds the tunable methodology values. `scripts/lib/` holds the pipeline modules, `scripts/nb/` the marimo notebooks and their helpers, and `scripts/tests/` the tests.
+`scripts/thesis.nu` holds the commands. `scripts/params.toml` holds the tunable methodology values. `scripts/lib/` holds the Nushell modules, `notebooks/` the Python notebooks, their helpers and their tests, and `scripts/tests/` the Nushell tests.
 
 The main price is the Steam 7-day sales average from the daily csgotrader.app snapshots.
 
@@ -24,12 +24,10 @@ thesis data fetch
 thesis data clean
 thesis eda
 thesis portfolio buy-and-hold --k 10
-thesis tables
-thesis charts
 ```
 
 Run `thesis --help` to list the commands and their flags. The `thesis` command comes from `devenv.nix`, so run it inside `devenv shell`. Nushell completions are generated from the command signatures before the shell starts.
 
-The pipeline writes the data to `files/`, the LaTeX tables to `tex/tables/`, and the charts to `images/` as PDF, because `lualatex` cannot read an SVG. `files/` is gitignored.
+The pipeline writes the data to `files/`, the LaTeX tables to `tex/tables/`, and the charts to `images/` as PNG. `files/` is gitignored.
 
-Open a notebook with `marimo edit scripts/nb/tables.py`. It reads the same flags as the command, so it runs without arguments.
+Open the notebooks with `devenv tasks run thesis:nb`. The task serves `notebooks` in JupyterLab, where a `.py` file opens as a notebook. Each notebook reads the same flags as its command, so it runs without arguments.
