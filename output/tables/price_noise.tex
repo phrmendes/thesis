@@ -1,0 +1,21 @@
+\begin{table}[H]
+\caption{Ruído de Preço — CS:GO}\label{tab:price_noise} 
+
+\fontsize{12.0pt}{14.4pt}\selectfont
+
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}ll}
+\toprule
+\textbf{Métrica} & \textbf{Valor} \\
+\midrule\addlinespace[2.5pt]
+Itens testados & 5.198 \\
+Itens com autocovariância negativa & 99,8\% \\
+Diferença implícita de Roll (mediana) & 12,66\% \\
+Razão de variância de 7 dias (itens, mediana) & 0,238 \\
+Razão de variância de 7 dias (mercado) & 2,380 \\
+\bottomrule
+\end{tabular*}
+\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\begin{minipage}{\linewidth}
+Itens com 400 dias ou mais de retorno. Autocovariância de primeira ordem do log do retorno. Razão de variância: variância da soma de 7 dias seguidos sobre 7 vezes a variância diária. Abaixo de 1 indica reversão típica de ruído de preço.\\
+\end{minipage}
+\end{table}

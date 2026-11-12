@@ -1,0 +1,23 @@
+\begin{table}[H]
+\caption{Retornos Diários por Faixa de Preço — CS:GO}\label{tab:price_buckets} 
+
+\fontsize{12.0pt}{14.4pt}\selectfont
+
+\resizebox{\ifdim\width>\linewidth\linewidth\else\width\fi}{!}{
+\begin{tabular}{lrrrrrr}
+\toprule
+\textbf{Preço diário (US\$)} & \textbf{Itens} & \textbf{Itens-dia} & \textbf{Preço mediano (US\$)} & \textbf{Média} & \textbf{DP} & \textbf{Retorno zero} \\
+\midrule\addlinespace[2.5pt]
+≤ 5 & 3.975 & 2.414.348 & 2,06 & 1,05\% & 18,48\% & 8,0\% \\
+5-25 & 3.813 & 1.482.497 & 9,25 & 0,72\% & 11,41\% & 4,3\% \\
+25-100 & 2.076 & 640.844 & 52,83 & 0,63\% & 13,10\% & 3,6\% \\
+100-800 & 1.262 & 551.335 & 174,26 & 1,50\% & 17,46\% & 5,3\% \\
+> 800 & 137 & 17.512 & 1.006,09 & 3,56\% & 25,84\% & 12,2\% \\
+\bottomrule
+\end{tabular}
+}
+\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\begin{minipage}{\linewidth}
+DP: desvio padrão. Um item entra em mais de uma faixa quando o preço cruza a fronteira.\\
+\end{minipage}
+\end{table}

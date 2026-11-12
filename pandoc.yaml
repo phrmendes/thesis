@@ -16,7 +16,4 @@ variables:
     - left=30mm
     - right=20mm
 include-in-header:
-  - ${.}/tex/packages.tex
-  - ${.}/tex/settings.tex
-include-before-body:
-  - ${.}/tex/preface.tex
+  - ${.}/preamble.tex

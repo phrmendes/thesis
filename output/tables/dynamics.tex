@@ -1,0 +1,31 @@
+\begin{table}[H]
+\caption{Dinâmica do Mercado — CS:GO}\label{tab:dynamics} 
+
+\fontsize{12.0pt}{14.4pt}\selectfont
+
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}ll}
+\toprule
+\textbf{Métrica} & \textbf{Valor} \\
+\midrule\addlinespace[2.5pt]
+Retorno diário médio do mercado & 0,94\% \\
+Desvio padrão do retorno do mercado & 1,10\% \\
+Autocorrelação do mercado (defasagem 1) & 0,3984 \\
+Autocorrelação do mercado (defasagem 2) & 0,2751 \\
+Autocorrelação do mercado (defasagem 3) & 0,2571 \\
+Autocorrelação do mercado (defasagem 7) & 0,2328 \\
+Autocorrelação dentro dos itens (defasagem 1) & -0,2776 \\
+Autocorrelação dentro dos itens (defasagem 2) & -0,0146 \\
+Autocorrelação dentro dos itens (defasagem 3) & 0,0066 \\
+Autocorrelação dentro dos itens (defasagem 7) & 0,0048 \\
+Correlação média dos itens com o mercado & 0,0986 \\
+Correlação mediana dos itens com o mercado & 0,0847 \\
+Teste ADF: log do índice do mercado & -0,15 (p = 0,945) \\
+Teste ADF: retorno do mercado & -7,07 (p = 0,000) \\
+Teste ARCH-LM: retorno do mercado (7 defasagens) & 145,78 (p = 0,000) \\
+\bottomrule
+\end{tabular*}
+\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\begin{minipage}{\linewidth}
+Mercado: média simples dos retornos diários limitados. Correlação: itens com 400 dias ou mais de retorno. ADF e ARCH-LM: estatística e p-valor. A autocorrelação negativa dentro dos itens pode refletir ruído no preço, não efeito de mercado.\\
+\end{minipage}
+\end{table}

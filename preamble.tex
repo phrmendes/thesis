@@ -1,3 +1,8 @@
+\usepackage[thesis]{academic-templates}
+\usepackage{booktabs}
+\usepackage[hidelinks]{hyperref}
+\usepackage{caption}
+
 \hfuzz=500pt
 \vfuzz=200pt
 \renewcommand{\headrulewidth}{0pt}
@@ -30,3 +35,20 @@
         "thankstitle":"Agradecimentos"
 }}
 
+% Pandoc calls \maketitle after \begin{document}. The front matter
+% runs right after the title block.
+\let\pandocmaketitle\maketitle
+\renewcommand{\maketitle}{%
+    \pandocmaketitle
+    \thesisCover
+    \thesisCatalog
+    \thesisSignatures{[
+            {"name":"Nome do professor","role":"Convidado 1"},
+            {"name":"Nome do professor","role":"Convidado 2"},
+            {"name":"Nome do professor","role":"Convidado 3"}
+    ]}
+    \thesisThanks{\lipsum[1]}
+    \thesisAbstract[pt]{Lorem, ipsum}{\lipsum[1]}
+    \thesisAbstract[en]{Lorem, ipsum}{\lipsum[1]}
+    \thesisLists
+}

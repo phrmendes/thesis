@@ -1,0 +1,37 @@
+\begin{table}[H]
+\caption{Auditoria da Limpeza — CS:GO}\label{tab:audit} 
+
+\fontsize{12.0pt}{14.4pt}\selectfont
+
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}ll}
+\toprule
+\textbf{Métrica} & \textbf{Valor} \\
+\midrule\addlinespace[2.5pt]
+Linhas brutas & 22.241.111 \\
+Itens brutos & 27.230 \\
+Dias com preço positivo & 1.077 \\
+Dias descartados (poucos preços) & 56 \\
+Linhas com preço positivo, em dias aproveitados & 12.549.791 \\
+Itens com preço positivo & 21.346 \\
+Itens selecionados pelo treino & 6.105 \\
+Linhas dos itens selecionados & 5.107.930 \\
+Linhas dentro dos limites de preço & 5.106.536 \\
+Linhas removidas pelos limites de preço & 1.394 \\
+Itens com linha válida & 6.105 \\
+Linhas limpas & 5.106.536 \\
+Dias com preço igual ao do dia anterior com preço & 5,42\% \\
+Maior sequência de preços iguais (dias) & 19 \\
+Itens com sequência acima de 28 dias & 0 \\
+Linhas sem retorno & 15,19\% \\
+Saltos diários (o preço dobra ou cai pela metade) & 23.095 \\
+Saltos revertidos & 9.745 \\
+Retornos limitados em 500\% & 1.003 \\
+Itens com preço médio abaixo de US\$ 1 & 29 \\
+Linhas sem raridade & 0,51\% \\
+\bottomrule
+\end{tabular*}
+\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\begin{minipage}{\linewidth}
+Linhas e itens depois de cada etapa da limpeza. Preço: média das vendas da Steam nas últimas 24 horas. Dia descartado: menos preços positivos que a metade do dia mediano, sinal de captura incompleta. Salto: o preço dobra ou cai pela metade de um dia com preço para o seguinte. Um salto reverte quando o preço seguinte fica entre 75\% e 125\% do preço anterior ao salto.\\
+\end{minipage}
+\end{table}

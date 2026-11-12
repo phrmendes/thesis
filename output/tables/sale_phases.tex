@@ -1,0 +1,26 @@
+\begin{table}[H]
+\caption{Retorno Diário do Mercado por Fase da Promoção — CS:GO}\label{tab:sale_phases} 
+
+\fontsize{12.0pt}{14.4pt}\selectfont
+
+\resizebox{\ifdim\width>\linewidth\linewidth\else\width\fi}{!}{
+\begin{tabular}{lrrrrrrr}
+\toprule
+ & \multicolumn{3}{c}{\textbf{Peso igual}} & \multicolumn{3}{c}{\textbf{Peso por preço}} \\
+\cmidrule(lr){2-4} \cmidrule(lr){5-7}
+\textbf{Fase} & \textbf{Dias} & \textbf{Coef.} & \textbf{t} & \textbf{p} & \textbf{Coef.} & \textbf{t} & \textbf{p} \\
+\midrule\addlinespace[2.5pt]
+Dias fora de promoção & 692 & 0,92\% & 13,59 & 0,000 & 0,18\% & 4,19 & 0,000 \\
+Pré-venda & 57 & -0,11\% & -0,64 & 0,521 & -0,22\% & -1,39 & 0,166 \\
+Promoção, primeira metade & 64 & -0,58\% & -2,70 & 0,007 & -0,39\% & -2,40 & 0,017 \\
+Promoção, segunda metade & 57 & -0,05\% & -0,19 & 0,849 & -0,19\% & -1,39 & 0,165 \\
+Pós-venda & 113 & 0,39\% & 2,13 & 0,033 & 0,28\% & 1,64 & 0,100 \\
+Virada do ano & 42 & 0,48\% & 1,87 & 0,062 & 0,58\% & 2,98 & 0,003 \\
+\bottomrule
+\end{tabular}
+}
+\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\begin{minipage}{\linewidth}
+Regressão do retorno diário do mercado sobre variáveis binárias de fase e da virada do ano, com erros de Newey-West (7 defasagens). A constante é a média dos dias fora de promoção. Pré-venda: metade da duração da promoção antes. Pós-venda: a duração da promoção depois. O peso por preço usa o preço do dia anterior com preço. Estimativas descritivas: a virada do ano está dentro da promoção de inverno e a amostra tem dez promoções.\\
+\end{minipage}
+\end{table}
