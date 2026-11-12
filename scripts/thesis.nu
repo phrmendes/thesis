@@ -92,8 +92,6 @@ export def --env "main data fetch" [
 
     let summary = (summarize-statuses $results)
 
-    msg --level done $"Fetched ($summary.fetched), skipped ($summary.skipped), failed ($summary.failed)"
-
     if ($summary.gaps | is-not-empty) {
         msg --level warn $"Gap days \(($summary.gaps | length)\): ($summary.gaps | str join ' ')"
     }
@@ -103,6 +101,8 @@ export def --env "main data fetch" [
 
         fail $"($summary.failed) snapshot downloads failed: ($failed_days)" $failed_days --label "failed days"
     }
+
+    msg --level done $"Fetched ($summary.fetched), skipped ($summary.skipped), failed ($summary.failed)"
 
     if $force or (not ($ITEMS_PATH | path exists)) {
         fetch-items

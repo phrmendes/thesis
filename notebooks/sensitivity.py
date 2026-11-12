@@ -68,7 +68,6 @@ variant_prices = {
 }
 
 cleaning_rows = [sensitivity_row(prices, name, args.k) for name, prices in variant_prices.items()]
-cleaning_rows[0]
 
 # %% [markdown]
 # ## Mover o calendário das promoções e a janela de preços
@@ -83,7 +82,6 @@ baseline = variant_prices["baseline"]
 shift_rows = [sensitivity_row(baseline, f"sale_shift_{shift}", args.k, shift_days=shift) for shift in (-1, 1)]
 window_rows = [sensitivity_row(baseline, "price_window_1", args.k, window=1)]
 summary = pl.concat([*cleaning_rows, *shift_rows, *window_rows])
-summary
 
 # %% [markdown]
 # ## Construir a tabela da tese

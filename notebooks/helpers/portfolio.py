@@ -55,7 +55,7 @@ def entry_prices(prices: pl.DataFrame, window: int | None = None) -> pl.DataFram
     recent = pl.col("date").is_between(last_day - timedelta(days=max_stale_days), last_day)
     entry_price = pl.col("price").tail(price_window(window)).median().alias("entry_price")
 
-    return prices.filter(recent).sort("name", "date").group_by("name").agg(entry_price)
+    return prices.filter(recent).sort("name", "date").group_by("name", maintain_order=True).agg(entry_price)
 
 
 def exit_prices(prices: pl.DataFrame, window: int | None = None) -> pl.DataFrame:
