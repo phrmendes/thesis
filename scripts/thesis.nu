@@ -17,14 +17,23 @@ use ./lib/stats.nu [save-table]
 const DEFAULT_CONCURRENCY = 10
 const FETCH_BATCH_SIZE = 50
 const NOTEBOOKS_DIR = (path self | path dirname | path dirname | path join "notebooks")
+const NOTEBOOK_OUTPUT_DIR = (path self | path dirname | path dirname | path join "output" "notebooks")
+const NOTEBOOKS = [
+    {name: "data_quality"}
+    {name: "returns"}
+    {name: "market"}
+    {name: "calendar_effects"}
+    {name: "evaluation"}
+    {name: "portfolios"}
+    {name: "sensitivity"}
+]
 const AUDIT_PATH = "files/audit.parquet"
 const ASSETS_PATH = "files/assets.parquet"
 const PORTFOLIO_PATH = "files/portfolio.parquet"
 const BUY_AND_HOLD_PATH = "files/buy_and_hold.parquet"
-const DATASET_PATH = "files/dataset.parquet"
-const PREDICTIONS_PATH = "files/predictions.parquet"
-const TABLES_DIR = "tex/tables"
-const IMAGES_DIR = "images"
+const SENSITIVITY_DIR = "files/sensitivity"
+const TABLES_DIR = "output/tables"
+const IMAGES_DIR = "output/images"
 
 # Thesis pipeline for the CS:GO skin prices. Run a command with
 export def main []: nothing -> nothing {
@@ -90,7 +99,9 @@ export def --env "main data fetch" [
     }
 
     if $summary.failed > 0 {
-        msg --level warn $"Failed days: ($summary.failures | str join ' ')"
+        let failed_days = $summary.failures | str join ' '
+
+        fail $"($summary.failed) snapshot downloads failed: ($failed_days)" $failed_days --label "failed days"
     }
 
     if $force or (not ($ITEMS_PATH | path exists)) {
@@ -100,10 +111,11 @@ export def --env "main data fetch" [
     }
 }
 
-# Build the cleaned weekly prices from the raw snapshots.
+# Build the cleaned daily prices from the raw snapshots.
 export def --env "main data clean" [
     --raw-dir: path = $RAW_DIR  # Folder with the raw snapshots.
-    --output: path = $PRICES_PATH  # Path of the cleaned weekly prices.
+    --output: path = $PRICES_PATH  # Path of the cleaned daily prices.
+    --raw  # Delete the raw snapshots after the cleaned tables save.
     --debug  # Write debug messages to /tmp/thesis/log.txt.
 ]: nothing -> nothing {
     debug-mode $debug
@@ -114,8 +126,8 @@ export def --env "main data clean" [
         fail $"no snapshots in ($raw_dir): run 'thesis data fetch' first" $raw_dir --label "raw directory"
     }
 
-    let raw = $files | timed "load snapshots" --step 1 --of 6 {|files| load-snapshots $files }
-    let stages = (clean-stages $raw)
+    let snapshots = $files | timed "load snapshots" --step 1 --of 6 {|files| load-snapshots $files }
+    let stages = (clean-stages $snapshots)
 
     let cleaned = (
         $stages
@@ -142,16 +154,82 @@ export def --env "main data clean" [
 
     $assets | timed "save assets" --step 6 --of 6 {|frame| $frame | save-table $ASSETS_PATH }
 
-    try {
-        rm --force ...$files
-    } catch {|err|
-        msg --level warn $"Could not remove the raw snapshots: ($err.msg)"
+    if $raw {
+        try {
+            rm --force ...$files
+        } catch {|err|
+            msg --level warn $"Could not remove the raw snapshots: ($err.msg)"
+        }
     }
 
     msg --level done $"Built ($output) with ($rows) rows"
 }
 
-# Run the EDA notebook: calculate, display, and export the tables and the charts.
+# Rebuild the cleaned prices for each sensitivity variant, then summarize them in the sensitivity notebook.
+export def --env "main sensitivity" [
+    --raw-dir: path = $RAW_DIR  # Folder with the raw snapshots.
+    --output-dir: path = $SENSITIVITY_DIR  # Folder for the cleaned table of each variant.
+    --debug  # Write debug messages to /tmp/thesis/log.txt.
+]: nothing -> nothing {
+    debug-mode $debug
+
+    let files = (snapshot-files $raw_dir)
+
+    if ($files | is-empty) {
+        fail $"no snapshots in ($raw_dir): run 'thesis data fetch' first" $raw_dir --label "raw directory"
+    }
+
+    let params = (load-params)
+    let variants = $params.sensitivity.variants
+    let total = $variants | length
+    let snapshots = (load-snapshots $files)
+    let items = (items-rarity)
+
+    mkdir $output_dir
+
+    for entry in ($variants | enumerate) {
+        let variant = $entry.item
+        let min_observations = $variant.min_observations? | default $params.clean.min_observations | into int
+        let min_day_share = $variant.min_day_share? | default $params.clean.min_day_share | into float
+        let max_gap_days = $variant.max_gap_days? | default $params.clean.max_gap_days | into int
+        let return_cap = $variant.return_cap? | default $params.clean.return_cap | into float
+        let path = $output_dir | path join $"($variant.name).parquet"
+
+        $variant | timed $"variant ($variant.name)" --step ($entry.index + 1) --of $total {|_|
+            let stages = (clean-stages $snapshots --min-observations $min_observations --min-day-share $min_day_share)
+
+            cleaned-prices $stages --items $items --max-gap-days $max_gap_days --return-cap $return_cap
+            | polars collect
+            | save-table $path
+        }
+    }
+
+    python ($NOTEBOOKS_DIR | path join "sensitivity.py") --directory $output_dir --tables $TABLES_DIR
+}
+
+# Run the notebooks and save each one with its code and results as output/notebooks/<name>.ipynb. It needs the pipeline outputs. The draft runs in the notebooks folder so the helpers import.
+export def --env "main render" [
+    --debug  # Write debug messages to /tmp/thesis/log.txt.
+]: nothing -> nothing {
+    debug-mode $debug
+
+    mkdir $NOTEBOOK_OUTPUT_DIR
+
+    for notebook in $NOTEBOOKS {
+        let source = $NOTEBOOKS_DIR | path join $"($notebook.name).py"
+        let draft = $NOTEBOOKS_DIR | path join $"render-($notebook.name).ipynb"
+
+        $notebook.name | timed $"render ($notebook.name)" {|name|
+            jupytext --to ipynb --output $draft $source
+            jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout=1800 --output $name --output-dir $NOTEBOOK_OUTPUT_DIR $draft
+            rm --force $draft
+        }
+    }
+
+    msg --level done $"Written ($NOTEBOOK_OUTPUT_DIR)"
+}
+
+# Run the five analysis notebooks in theme order: data quality, returns, market, calendar effects, and evaluation.
 export def "main eda" [
     --debug  # Write debug messages to /tmp/thesis/log.txt.
 ]: nothing -> nothing {
@@ -162,8 +240,36 @@ export def "main eda" [
     let audit_text = $AUDIT_PATH | into string
     let tables_text = $TABLES_DIR | into string
     let images_text = $IMAGES_DIR | into string
+    let common = ["--prices" $prices_text "--tables" $tables_text]
 
-    python ($NOTEBOOKS_DIR | path join "eda.py") --prices $prices_text --assets $assets_text --audit $audit_text --tables $tables_text --images $images_text
+    let with_images = [...$common "--images" $images_text]
+
+    let notebooks = [
+        {
+            name: "data_quality"
+            flags: [...$with_images "--assets" $assets_text "--audit" $audit_text]
+        }
+        {
+            name: "returns"
+            flags: $with_images
+        }
+        {
+            name: "market"
+            flags: $with_images
+        }
+        {
+            name: "calendar_effects"
+            flags: $common
+        }
+        {
+            name: "evaluation"
+            flags: $common
+        }
+    ]
+
+    for notebook in $notebooks {
+        python ($NOTEBOOKS_DIR | path join $"($notebook.name).py") ...$notebook.flags
+    }
 }
 
 # Build an equal-weight buy-and-hold portfolio.
@@ -185,7 +291,7 @@ export def --env "main portfolio buy-and-hold" [
         | flatten
     )
 
-    python ($NOTEBOOKS_DIR | path join "portfolios.py") --prices $PRICES_PATH --k $k --rank $rank ...$flags --buy-and-hold $BUY_AND_HOLD_PATH --output $PORTFOLIO_PATH --table ($TABLES_DIR | path join "portfolio.tex")
+    python ($NOTEBOOKS_DIR | path join "portfolios.py") --prices $PRICES_PATH --k $k --rank $rank ...$flags --buy-and-hold $BUY_AND_HOLD_PATH --output $PORTFOLIO_PATH --tables $TABLES_DIR --images $IMAGES_DIR
 }
 
 # Print the Nushell completion for the commands.
@@ -194,12 +300,4 @@ export def "main completions" []: nothing -> nothing {
     let text = (extern-text $commands)
 
     print $text
-}
-
-# Fit the CatBoost model and write the conformal predictions. This is a skeleton.
-export def "main model fit" []: nothing -> nothing {
-    let dataset_text = $DATASET_PATH | into string
-    let output_text = $PREDICTIONS_PATH | into string
-
-    python ($NOTEBOOKS_DIR | path join "models.py") --dataset $dataset_text --output $output_text
 }

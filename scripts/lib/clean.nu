@@ -1,8 +1,8 @@
 use ./constants.nu [PRICES_PATH]
-use ./helpers.nu [winsorize-return fail week-seasons]
+use ./helpers.nu [date-seasons fail winsorize-return]
 use ./output.nu [msg]
 use ./params.nu [load-params]
-use ./stats.nu [week-index weekly-raw-return]
+use ./stats.nu [day-index]
 
 # Open one parquet table written by a data command.
 export def load-table [path: path, command: string] {
@@ -29,33 +29,59 @@ export def load-prices [path: path = $PRICES_PATH] {
     load-table $path "data clean"
 }
 
-# Add the week to the positive daily prices.
-def add-week [raw] {
+# Keep the positive daily prices. The daily price is the Steam 24-hour sale average.
+def positive-daily [raw]: nothing -> any {
     let has_price = ((polars col price | polars is-not-null) and ((polars col price) > 0))
 
     $raw
     | polars filter $has_price
-    | polars with-column (polars col date | polars truncate 1w | polars as week)
+    | polars select name date price
+    | polars collect
 }
 
-# Mark the weeks as training or testing.
-def add-periods []: any -> any {
-    let weeks = $in
-    let total = $weeks | polars into-nu | length
-    let params = (load-params)
-    let return_weeks = $total - 1
-    let training_weeks = $return_weeks * $params.clean.training_share | math floor
-    let training_end = 1 + $training_weeks
+# Find the days with enough positive prices. A day below the share of the median day is a broken snapshot.
+def usable-days [daily, share: float]: nothing -> any {
+    let counts = (
+        $daily
+        | polars group-by date
+        | polars agg [(polars len | polars as day_count)]
+    )
 
-    $weeks
+    let threshold = (
+        $counts
+        | polars select (polars col day_count | polars median | polars as median_count)
+        | polars into-nu
+        | first
+        | get median_count
+        | into float
+    ) * $share
+
+    let is_usable = ((polars col day_count) >= $threshold)
+
+    $counts
+    | polars filter $is_usable
+    | polars select date
+    | polars with-column (polars lit true | polars as usable)
+}
+
+# Mark the days as training or testing.
+def add-periods []: any -> any {
+    let days = $in
+    let total = $days | polars into-nu | length
+    let params = (load-params)
+    let return_days = $total - 1
+    let training_days = $return_days * $params.clean.training_share | math floor
+    let training_end = 1 + $training_days
+
+    $days
     | polars with-column (
-        polars when ((polars col week_number) <= $training_end) "training"
+        polars when ((polars col day_number) <= $training_end) "training"
         | polars otherwise "testing"
         | polars as period
     )
 }
 
-# Keep the assets with enough positive daily prices in the training weeks.
+# Keep the assets with enough positive daily prices in the training days.
 def select-assets [--min-mean-price: float, --min-observations: int]: any -> any {
     let prices = $in
     let is_expensive_enough = ((polars col mean_price) >= $min_mean_price)
@@ -97,25 +123,33 @@ def valid-daily-prices [selected, training]: any -> any {
     | polars filter ($above_floor and $below_ceiling)
 }
 
-# Split the raw prices into the stages that the cleaning and the audit share.
-export def clean-stages [raw, --min-mean-price: float, --min-observations: int]: nothing -> record {
+# Split the raw prices into the stages that the cleaning and the audit share. The daily price is `steam_24h`.
+export def clean-stages [
+    raw
+    --min-mean-price: float
+    --min-observations: int
+    --min-day-share: float
+]: nothing -> record {
     let params = (load-params)
     let min_mean_price = $min_mean_price | default $params.clean.min_mean_price | into float
     let min_observations = $min_observations | default $params.clean.min_observations | into int
+    let min_day_share = $min_day_share | default $params.clean.min_day_share | into float
 
-    let daily = (
-        add-week $raw
-        | polars select name date price steam_24h week
-        | polars collect
+    let prices = (
+        $raw
+        | polars select name date steam_24h price composite_price buff_price
+        | polars rename [price steam_24h] [price_7d price]
     )
 
-    let weeks = $daily | week-index
-    let periods = $weeks | add-periods
+    let usable = (usable-days (positive-daily $prices) $min_day_share)
+    let daily = (positive-daily $prices | polars join $usable date date --inner | polars select name date price)
+    let days = $daily | day-index
+    let periods = $days | add-periods
 
     let is_training = ((polars col period) == "training")
     let training = (
         $daily
-        | polars join $periods week week --inner
+        | polars join $periods date date --inner
         | polars filter $is_training
     )
 
@@ -139,13 +173,18 @@ export def clean-stages [raw, --min-mean-price: float, --min-observations: int]:
     )
     let is_positive = (polars col positive)
     let audit = (
-        $raw
-        | polars with-column (polars col date | polars truncate 1w | polars as week)
+        $prices
         | polars with-column (((polars col price | polars is-not-null)) and ((polars col price) > 0) | polars as positive)
+        | polars join $usable date date --left
+        | polars with-column (
+            polars when ((polars col usable | polars is-null)) false
+            | polars otherwise (polars col usable)
+            | polars as usable
+        )
         | polars join $is_selected name name --left
         | polars join $is_valid [name date] [name date] --left
         | polars with-column (
-            polars when ($is_positive and (polars col selected | polars is-not-null)) true
+            polars when ($is_positive and (polars col usable) and (polars col selected | polars is-not-null)) true
             | polars otherwise false
             | polars as selected
         )
@@ -154,15 +193,15 @@ export def clean-stages [raw, --min-mean-price: float, --min-observations: int]:
             | polars otherwise (polars col valid)
             | polars as valid
         )
-        | polars select name date week price steam_24h positive selected valid
+        | polars select name date price positive usable selected valid
     )
 
     {
-        raw: $raw
+        raw: $prices
         min_mean_price: $min_mean_price
         min_observations: $min_observations
         daily: $daily
-        weeks: $weeks
+        days: $days
         periods: $periods
         training: $training
         selected: $selected
@@ -171,159 +210,115 @@ export def clean-stages [raw, --min-mean-price: float, --min-observations: int]:
     }
 }
 
-# Keep the last valid daily price of each week.
-def weekly-closes []: any -> any {
-    polars sort-by name week date
-    | polars group-by [name week]
-    | polars agg [
-        (polars col price | polars last | polars as close)
-    ]
-}
-
-# Keep the last positive price of one source column in each week. No bounds, no fill.
-def source-closes [column: string, output: string]: any -> any {
+# Keep the daily price of one source. A missing price stays out of the table.
+def source-prices [column: string]: any -> any {
     let prices = $in
     let has_price = ((polars col $column) > 0)
 
     $prices
     | polars filter $has_price
-    | polars with-column (polars col date | polars truncate 1w | polars as week)
-    | polars sort-by name week date
-    | polars group-by [name week]
-    | polars agg [
-        (polars col $column | polars last | polars as $output)
-    ]
+    | polars select name date $column
 }
 
-# Count the days of each week with a Steam 24-hour price. Use it as a liquidity proxy.
-def active-days []: any -> any {
+# Add the daily return between two observed prices that are at most the gap limit apart. No price is filled.
+def add-daily-return [max_gap: int, return_cap: float]: any -> any {
     let prices = $in
-    let has_steam_price = ((polars col steam_24h) > 0)
+    let is_within_gap = ((polars col gap) <= $max_gap)
 
-    $prices
-    | polars with-column (
-        polars when $has_steam_price 1
-        | polars otherwise 0
-        | polars as active
+    let returns = (
+        $prices
+        | polars sort-by name date
+        | polars with-column (polars col date | polars cast i32 | polars as date_number)
+        | polars with-column (
+            polars col date_number
+            | polars shift 1
+            | polars over (polars col name)
+            | polars as previous_number
+        )
+        | polars with-column (
+            polars col price
+            | polars shift 1
+            | polars over (polars col name)
+            | polars as previous_price
+        )
+        | polars with-column (((polars col date_number) - (polars col previous_number)) | polars as gap)
+        | polars filter $is_within_gap
+        | polars with-column (((polars col price) / (polars col previous_price) - 1) | polars as raw_return)
+        | polars with-column (winsorize-return (polars col raw_return) --cap $return_cap | polars as return)
+        | polars select name date raw_return return
     )
-    | polars group-by [name week]
-    | polars agg [
-        (polars col active | polars sum | polars as active_days)
-    ]
-}
 
-# Complete every selected asset over every week and forward fill the last close.
-def fill-weekly-grid [selected, weeks]: any -> any {
-    let closes = $in
-    let observed_weeks = $closes | polars join $weeks week week --inner
-    let is_filled = polars col filled | polars is-not-null
-
-    $selected
-    | polars join $weeks --cross
-    | polars join $closes [name week] [name week] --left
-    | polars with-column (
-        polars when ((polars col close | polars is-null)) 0
-        | polars otherwise 1
-        | polars as observed
-    )
-    | polars with-column (
-        polars when ((polars col close | polars is-null)) 0
-        | polars otherwise (polars col week_number)
-        | polars cumulative max
-        | polars over (polars col name)
-        | polars as anchor
-    )
-    | polars join (
-        $observed_weeks
-        | polars select name week_number close
-        | polars rename [week_number close] [anchor filled]
-    ) [name anchor] [name anchor] --left
-    | polars sort-by name week
-    | polars filter $is_filled
-    | polars with-column (((polars col week_number) - (polars col anchor)) | polars as stale)
-}
-
-# Add the weekly returns and drop the rows that are stale for too long.
-def add-weekly-return []: any -> any {
-    let max_stale = (load-params).clean.max_stale_weeks | into int
-    let has_return = polars col return | polars is-not-null
-    let is_recent = ((polars col stale) <= $max_stale)
-    let follows_recent = ((polars col previous_stale) <= $max_stale)
-
-    $in
-    | polars with-column (weekly-raw-return filled | polars as raw_return)
-    | polars with-column (winsorize-return (polars col raw_return) | polars as return)
-    | polars with-column (
-        polars col stale
-        | polars shift 1
-        | polars over (polars col name)
-        | polars as previous_stale
-    )
-    | polars filter ($has_return and $is_recent and $follows_recent)
+    $prices | polars join $returns [name date] [name date] --left
 }
 
 # Add the rarity, the period, and the sale season.
 def attach-metadata [stages: record, items]: any -> any {
-    let weekly = $in
+    let daily = $in
 
     let with_rarity = (
         if ($items | describe) == "nothing" {
-            $weekly | polars with-column (polars lit "" | polars as rarity)
+            $daily | polars with-column (polars lit "" | polars as rarity)
         } else {
-            $weekly | polars join $items name name --left
+            $daily | polars join $items name name --left
         }
     )
 
     let seasons = (
-        ($stages.weeks | polars select week | polars collect | polars into-nu)
-        | week-seasons
+        ($stages.days | polars select date | polars collect | polars into-nu)
+        | date-seasons
         | polars into-df
-        | polars with-column (polars col week | polars cast date | polars as week)
+        | polars with-column (polars col date | polars cast date | polars as date)
         | polars collect
     )
 
     $with_rarity
-    | polars join $seasons week week --left
-    | polars join ($stages.periods | polars select week period) week week --left
+    | polars join $seasons date date --left
+    | polars join ($stages.periods | polars select date period) date date --left
     | polars select [
         name
         rarity
-        week
+        date
         period
-        filled
+        price
         return
         raw_return
         sale_season
-        observed
-        active_days
-        composite_close
-        buff_close
+        price_7d
+        composite_price
+        buff_price
     ]
-    | polars rename filled price
-    | polars sort-by name week
+    | polars sort-by name date
 }
 
-# Build cleaned weekly prices from the raw daily prices.
-export def cleaned-prices [stages: record, --items: any = null] {
-    msg --level debug "clean: liquidity proxy"
+# Build the cleaned daily prices from the raw daily prices.
+export def cleaned-prices [
+    stages: record
+    --items: any = null
+    --max-gap-days: int
+    --return-cap: float
+]: nothing -> any {
+    msg --level debug "clean: daily returns"
 
-    let activity = $stages.valid | active-days
+    let params = (load-params)
+    let max_gap = $max_gap_days | default $params.clean.max_gap_days | into int
+    let cap = $return_cap | default $params.clean.return_cap | into float
 
-    msg --level debug "clean: weekly grid and returns"
+    let composite = ($stages.raw | source-prices composite_price | polars collect)
+    let buff = ($stages.raw | source-prices buff_price | polars collect)
+    let price_7d = ($stages.raw | source-prices price_7d | polars collect)
 
-    let weekly = (
+    let daily = (
         $stages.valid
-        | weekly-closes
-        | fill-weekly-grid $stages.selected $stages.weeks
-        | add-weekly-return
-        | polars join $activity [name week] [name week] --left
-        | polars join ($stages.raw | source-closes composite_price composite_close | polars collect) [name week] [name week] --left
-        | polars join ($stages.raw | source-closes buff_price buff_close | polars collect) [name week] [name week] --left
+        | polars select name date price
+        | add-daily-return $max_gap $cap
+        | polars join $price_7d [name date] [name date] --left
+        | polars join $composite [name date] [name date] --left
+        | polars join $buff [name date] [name date] --left
     )
 
     msg --level debug "clean: context"
 
-    $weekly | attach-metadata $stages $items
+    $daily | attach-metadata $stages $items
 }
 
 # Build one row per raw asset with its history and the selection result.
@@ -332,9 +327,9 @@ export def asset-universe [stages: record]: nothing -> any {
         $stages.daily
         | polars group-by name
         | polars agg [
-            (polars col week | polars min | polars as first_week)
-            (polars col week | polars max | polars as last_week)
-            (polars col week | polars n-unique | polars as positive_weeks)
+            (polars col date | polars min | polars as first_date)
+            (polars col date | polars max | polars as last_date)
+            (polars col date | polars n-unique | polars as positive_days)
         ]
     )
 

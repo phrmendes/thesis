@@ -1,31 +1,19 @@
 use ./output.nu [msg]
 
-# Return the ratio between the current and the previous weekly price.
-def weekly-ratio [column: string]: nothing -> any {
-    let previous = polars col $column | polars shift 1 | polars over (polars col name)
-
-    (polars col $column) / $previous
-}
-
-# Return the uncapped weekly return expression for one price column.
-export def weekly-raw-return [column: string]: nothing -> any {
-    (weekly-ratio $column) - 1
-}
-
-# Return the sorted unique weeks with a week number that starts at one.
-export def week-index []: any -> any {
+# Return the sorted unique days with a day number that starts at one.
+export def day-index []: any -> any {
     let prices = $in
 
     $prices
-    | polars select week
+    | polars select date
     | polars unique
-    | polars sort-by week
+    | polars sort-by date
     | polars collect
     | polars into-nu
     | enumerate
-    | each {|row| {week: $row.item.week, week_number: ($row.index + 1)} }
+    | each {|row| {date: $row.item.date, day_number: ($row.index + 1)} }
     | polars into-df
-    | polars with-column (polars col week | polars cast date | polars as week)
+    | polars with-column (polars col date | polars cast date | polars as date)
     | polars collect
 }
 

@@ -19,24 +19,23 @@ SCHEMAS: dict[TableName, pl.Schema] = {
         {
             "name": pl.String(),
             "rarity": pl.Categorical(),
-            "week": pl.Date(),
+            "date": pl.Date(),
             "period": pl.Enum(PERIODS),
             "price": pl.Float64(),
             "return": pl.Float64(),
             "raw_return": pl.Float64(),
             "sale_season": pl.Enum(SALE_SEASONS),
-            "observed": pl.Int32(),
-            "active_days": pl.Int32(),
-            "composite_close": pl.Float64(),
-            "buff_close": pl.Float64(),
+            "price_7d": pl.Float64(),
+            "composite_price": pl.Float64(),
+            "buff_price": pl.Float64(),
         }
     ),
     "assets": pl.Schema(
         {
             "name": pl.String(),
-            "first_week": pl.Date(),
-            "last_week": pl.Date(),
-            "positive_weeks": pl.UInt64(),
+            "first_date": pl.Date(),
+            "last_date": pl.Date(),
+            "positive_days": pl.UInt64(),
             "training_mean_price": pl.Float64(),
             "training_observations": pl.UInt64(),
             "reason": pl.Enum(SELECTION_REASONS),
@@ -46,10 +45,9 @@ SCHEMAS: dict[TableName, pl.Schema] = {
         {
             "name": pl.String(),
             "date": pl.Date(),
-            "week": pl.Date(),
             "price": pl.Float64(),
-            "steam_24h": pl.Float64(),
             "positive": pl.Boolean(),
+            "usable": pl.Boolean(),
             "selected": pl.Boolean(),
             "valid": pl.Boolean(),
         }

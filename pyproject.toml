@@ -29,13 +29,7 @@ ignore-errors-in-generated-code = false
 ]
 "notebooks/**/*" = [
   "INP001",   # The notebooks are scripts, not a package.
-  "PT009",    # The tests use the unittest assertions.
-  "PT027",    # The tests use the unittest assertions.
-  "D101",     # A test class name says what it covers.
-  "D102",     # A test method name says what it checks.
-  "D104",     # A test package needs no docstring.
-  "PLR2004",  # The tests compare hand-computed values.
-  "DTZ001",   # The test dates carry no timezone.
+  "D104",     # A package marker stays empty.
   "T201",     # The notebooks print the path of each written file.
   "RUF069",   # A weekly return of exactly zero is a real observation, not float noise.
 ]

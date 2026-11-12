@@ -6,3 +6,4 @@ __pycache__
 files/
 *.ipynb
 notebooks/.ipynb_checkpoints
+!output/notebooks/*.ipynb

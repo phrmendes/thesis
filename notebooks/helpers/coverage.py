@@ -2,79 +2,66 @@ import polars as pl
 from helpers.frames import bucket_label, with_empty_buckets
 from helpers.schemas import SELECTION_REASONS
 
-WEEK_BUCKET_LABELS = ("< 25", "25-49", "50-74", "75-99", "100-124", "125+")
+DAY_BUCKET_LABELS = ("< 200", "200-399", "400-599", "600-799", "800-999", "1000+")
 
-WEEK_BUCKET_BREAKS = (24, 49, 74, 99, 124)
-
-
-def coverage_weekly(prices: pl.DataFrame) -> pl.DataFrame:
-    """Count the assets with a price in each week.
-
-    Returns:
-        One row per week with the number of assets.
-
-    """
-    return prices.group_by("week").agg(pl.col("name").count().alias("assets")).sort("week")
+DAY_BUCKET_BREAKS = (199, 399, 599, 799, 999)
 
 
-def observed_weekly_assets(prices: pl.DataFrame) -> pl.DataFrame:
-    """Count the assets with a real price in each week.
+def coverage_by_day(prices: pl.DataFrame) -> pl.DataFrame:
+    """Count the assets with a price on each day.
 
     Returns:
-        One row per week with the asset count.
+        One row per day with the number of assets.
 
     Raises:
-        SystemExit: The cleaned prices have no observed week.
+        SystemExit: The cleaned prices are empty.
 
     """
-    observed = prices.filter(pl.col("observed") == 1)
-    weekly = coverage_weekly(observed)
-
-    if weekly.is_empty():
+    if prices.is_empty():
         message = "cleaned prices are empty"
         raise SystemExit(message)
 
-    return weekly
+    return prices.group_by("date").agg(pl.col("name").count().alias("assets")).sort("date")
 
 
 def coverage_daily(prices: pl.DataFrame, audit: pl.DataFrame) -> pl.DataFrame:
-    """Summarize temporal coverage and assets per week.
+    """Summarize temporal coverage and assets per day.
 
     Returns:
-        One row with the price dates, the return weeks, the observed share, and the assets per week.
+        One row with the price dates, the days, the return share, and the assets per day.
 
     """
-    price_dates = audit.select("first_price_week", "last_price_day")
+    price_dates = audit.select("first_price_day", "last_price_day")
     assets = pl.col("assets")
 
-    assets_per_week = observed_weekly_assets(prices).select(
-        assets.min().alias("min_assets_per_week"),
-        assets.mean().alias("avg_assets_per_week"),
-        assets.max().alias("max_assets_per_week"),
+    assets_per_day = coverage_by_day(prices).select(
+        assets.min().alias("min_assets_per_day"),
+        assets.mean().alias("avg_assets_per_day"),
+        assets.max().alias("max_assets_per_day"),
     )
 
-    return_weeks = prices.select(
-        pl.col("week").min().alias("first_return_week"),
-        pl.col("week").n_unique().alias("return_weeks"),
-        pl.col("observed").mean().alias("asset_week_share"),
+    days = prices.select(
+        pl.col("date").n_unique().alias("price_days"),
+        pl.col("date").filter(pl.col("return").is_not_null()).min().alias("first_return_day"),
+        pl.col("return").is_not_null().mean().alias("return_row_share"),
     )
 
-    return pl.concat([price_dates, return_weeks, assets_per_week], how="horizontal_extend")
+    return pl.concat([price_dates, days, assets_per_day], how="horizontal_extend")
 
 
 def coverage_items(assets: pl.DataFrame) -> pl.DataFrame:
-    """Group the raw assets by their number of weeks with a positive price.
+    """Group the raw assets by their number of days with a positive price.
 
     Returns:
         One row per bucket with the universe and the selected counts.
 
     """
-    weeks_range = bucket_label("positive_weeks", WEEK_BUCKET_BREAKS, WEEK_BUCKET_LABELS).alias("weeks_range")
+    days_range = bucket_label("positive_days", DAY_BUCKET_BREAKS, DAY_BUCKET_LABELS).alias("days_range")
     universe_assets = pl.len().alias("universe_assets")
     selected_assets = (pl.col("reason") == "selected").sum().alias("selected_assets")
-    counts = assets.group_by(weeks_range).agg(universe_assets, selected_assets)
+    counts = assets.group_by(days_range).agg(universe_assets, selected_assets)
 
-    return with_empty_buckets(counts, "weeks_range", WEEK_BUCKET_LABELS)
+    return with_empty_buckets(counts, "days_range", DAY_BUCKET_LABELS)
 
 
 def launch_period_groups(assets: pl.DataFrame) -> pl.DataFrame:
@@ -84,8 +71,8 @@ def launch_period_groups(assets: pl.DataFrame) -> pl.DataFrame:
         One row per launch period with the reason counts.
 
     """
-    year = pl.col("first_week").dt.year()
-    half = (pl.col("first_week").dt.month() - 1) // 6 + 1
+    year = pl.col("first_date").dt.year()
+    half = (pl.col("first_date").dt.month() - 1) // 6 + 1
     launch_period = pl.concat_str(year, pl.lit("-H"), half).alias("launch_period")
     reason_counts = [(pl.col("reason") == reason).sum().alias(reason) for reason in SELECTION_REASONS]
 
@@ -95,33 +82,33 @@ def launch_period_groups(assets: pl.DataFrame) -> pl.DataFrame:
 
 
 def quality_metrics(prices: pl.DataFrame) -> pl.DataFrame:
-    """Summarize size, return signs, coverage, and metric availability.
+    """Summarize size, return signs, and the days with no return.
 
     Returns:
         One row with the quality metrics.
 
     """
     returns = pl.col("return")
-    weeks = pl.col("weeks")
+    days = pl.col("days")
 
-    weeks_per_asset = (
+    days_per_asset = (
         prices.group_by("name")
-        .agg(pl.col("observed").sum().alias("weeks"))
+        .agg(pl.len().alias("days"))
         .select(
-            weeks.min().alias("min_weeks_per_asset"),
-            weeks.mean().alias("avg_weeks_per_asset"),
-            weeks.max().alias("max_weeks_per_asset"),
+            days.min().alias("min_days_per_asset"),
+            days.mean().alias("avg_days_per_asset"),
+            days.max().alias("max_days_per_asset"),
         )
     )
 
     totals = prices.select(
         pl.len().alias("records"),
         pl.col("name").n_unique().alias("assets"),
-        pl.col("week").n_unique().alias("weeks"),
-        (returns > 0).sum().alias("positive_return_weeks"),
-        (returns < 0).sum().alias("negative_return_weeks"),
-        (returns == 0.0).sum().alias("zero_return_weeks"),
-        (pl.len() - pl.col("observed").sum()).alias("filled_rows"),
+        pl.col("date").n_unique().alias("days"),
+        (returns > 0).sum().alias("positive_return_days"),
+        (returns < 0).sum().alias("negative_return_days"),
+        (returns == 0.0).sum().alias("zero_return_days"),
+        returns.is_null().sum().alias("days_without_return"),
     )
 
-    return pl.concat([totals, weeks_per_asset], how="horizontal_extend")
+    return pl.concat([totals, days_per_asset], how="horizontal_extend")

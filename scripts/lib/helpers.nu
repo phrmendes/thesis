@@ -39,9 +39,9 @@ export def with-retry [attempts: int, action: closure] {
     }
 }
 
-# Winsorize one expression at the return cap bounds.
-export def winsorize-return [value] {
-    let cap = (load-params).clean.return_cap
+# Winsorize one expression at the return cap bounds. The cap defaults to clean.return_cap.
+export def winsorize-return [value, --cap: float] {
+    let cap = $cap | default (load-params).clean.return_cap | into float
     let lower = (0 - $cap)
 
     polars when ($value < $lower) $lower
@@ -49,27 +49,25 @@ export def winsorize-return [value] {
     | polars otherwise $value
 }
 
-# Return the sale season of one week, or "none".
-export def sale-season [week: datetime]: nothing -> string {
+# Return the sale season of one day, or "none".
+export def sale-season [day: datetime]: nothing -> string {
     let seasons = (
         (load-params).sale_periods
-        | where not (
-            ($week > ($it.end | into datetime))
-            or (($week + 6day) < ($it.start | into datetime))
-        )
+        | where (($day >= ($it.start | into datetime)) and ($day <= ($it.end | into datetime)))
         | get season
         | sort
     )
+
     if ($seasons | is-empty) { return "none" }
 
     $seasons | first
 }
 
-# Add a sale season to every week of a table.
-export def week-seasons []: table -> table {
-    let weeks = $in
+# Add a sale season to every day of a table.
+export def date-seasons []: table -> table {
+    let days = $in
 
-    $weeks | each {|row| {week: $row.week, sale_season: (sale-season $row.week)} }
+    $days | each {|row| {date: $row.date, sale_season: (sale-season $row.date)} }
 }
 
 # Collect a frame to its first row as a record.

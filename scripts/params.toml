@@ -3,43 +3,78 @@ first_date = "2020-11-02"
 last_date = "2023-10-30"
 
 [clean]
-# Weekly returns are winsorized between minus this value and this value.
-return_cap = 1.0
-# Share of the weeks after the first price week used for training.
+# Daily returns are winsorized between minus this value and this value. A cap of 1.0 erased most of the drift of
+# the prices, because many items double in a day for good. A cap of 5.0 keeps 96% of the drift of the log return.
+return_cap = 5.0
+# Share of the days after the first price day used for training.
 training_share = 0.7
 # The daily price must stay within these multiples of the training median.
 min_price_multiple = 0.05
 max_price_multiple = 20.0
-# The asset filter uses the training weeks only.
+# The asset filter uses the training days only.
 min_mean_price = 1.0
 min_observations = 350
-max_stale_weeks = 4
+# A snapshot day with fewer positive prices than this share of the median day is a broken snapshot. Drop it.
+min_day_share = 0.5
+# A return needs two observed prices at most this many days apart. No price is filled.
+max_gap_days = 1
 # A run of identical daily prices longer than this is a stale price.
 max_unchanged_days = 28
 
 [eda]
-item_min_weeks = 100
+# An item needs this many days with a return to enter a per-item ranking.
+item_min_days = 400
+# First day of the CS2 regime: the release of Counter-Strike 2.
+regime_break = "2023-09-27"
+# The turn of the year runs from the last week of December to the first week of January (Glaus, 2022).
+turn_of_year_start = "12-25"
+turn_of_year_end = "01-07"
+# Days that move the sale calendar. The sensitivity run tries -1 and 1.
+sale_lag_days = 0
+
+[eval]
+# The model evaluation uses expanding training windows. The first training window has this many days.
+initial_days = 365
+# Days between the starts of two folds.
+step_days = 91
+# Days in the testing window of one fold.
+horizon_days = 91
 
 [charts]
 # Window of the rolling standard deviation in the market chart.
-volatility_weeks = 13
+volatility_days = 91
 # Width of one return bucket in the histogram.
 bin_width = 0.05
 # Highest raw return that the histogram draws.
 raw_ceiling = 5.0
 
 [[charts.events]]
-name = "CS2"
+name = "CS2 announcement"
 date = "2023-03-22"
 
-[portfolio]
-# 5% Steam plus 10% game fee, kept from the final sale.
-net_sale_share = 0.85
-min_roi = 0.05
-min_sharpe = 0.10
-min_sortino = 0.20
+[[charts.events]]
+name = "CS2 release"
+date = "2023-09-27"
 
-# From SteamDB. A week counts when it touches a period.
+[portfolio]
+# 5% Steam plus 10% game fee, kept from the final sale. Guede-Fernandez et al. use a 10% cost.
+net_sale_share = 0.85
+# The ratios are daily and not annualized, so the minimums are lower than the 1 and 2 of Guede-Fernandez et al.
+# They come from the weekly values 0.10 and 0.20 divided by the square root of 7. Set before the testing days.
+min_roi = 0.05
+min_sharpe = 0.04
+min_sortino = 0.08
+# A candidate needs an observed price at most this many days before the first testing day.
+max_stale_days = 7
+# The entry, exit, and training prices are the median of this many last observed prices.
+price_window_days = 7
+# Random portfolios that benchmark the selected one.
+random_draws = 1000
+seed = 42
+# Portfolio sizes of the k sweep.
+k_sweep = [5, 10, 20, 50, 100, 200]
+
+# From SteamDB. A day counts when it falls inside a period.
 [[sale_periods]]
 season = "autumn"
 start = "2020-11-25"
@@ -89,3 +124,43 @@ end = "2023-03-23"
 season = "summer"
 start = "2023-06-29"
 end = "2023-07-13"
+
+# Each variant of the sensitivity run overrides one cleaning choice. The baseline has no override.
+[[sensitivity.variants]]
+name = "baseline"
+
+[[sensitivity.variants]]
+name = "day_share_0.3"
+min_day_share = 0.3
+
+[[sensitivity.variants]]
+name = "day_share_0.7"
+min_day_share = 0.7
+
+[[sensitivity.variants]]
+name = "observations_100"
+min_observations = 100
+
+[[sensitivity.variants]]
+name = "observations_200"
+min_observations = 200
+
+[[sensitivity.variants]]
+name = "observations_500"
+min_observations = 500
+
+[[sensitivity.variants]]
+name = "gap_3"
+max_gap_days = 3
+
+[[sensitivity.variants]]
+name = "cap_1.0"
+return_cap = 1.0
+
+[[sensitivity.variants]]
+name = "cap_2.0"
+return_cap = 2.0
+
+[[sensitivity.variants]]
+name = "cap_10.0"
+return_cap = 10.0

@@ -2,6 +2,7 @@ import re
 from typing import TYPE_CHECKING
 
 import polars as pl
+from helpers.params import load_params
 
 if TYPE_CHECKING:
     from datetime import date
@@ -57,6 +58,16 @@ def format_metric(value: float | date | None, spec: str) -> str:
         return "n/d"
 
     return pt_text(format(value, spec))
+
+
+def cap_text() -> str:
+    """Write the return cap as a percent in pt-BR.
+
+    Returns:
+        The cap, for example `500%`.
+
+    """
+    return format_metric(load_params()["clean"]["return_cap"], ".0%")
 
 
 def metric_text_table(metrics: pl.DataFrame, labels: dict[str, str], formats: dict[str, str]) -> pl.DataFrame:

@@ -1,4 +1,6 @@
 import polars as pl
+from numpy import asarray
+from statsmodels.stats.diagnostic import het_arch
 from statsmodels.tsa.stattools import acf, adfuller
 
 
@@ -22,14 +24,26 @@ def autocorrelations(values: list[float], max_lag: int) -> list[float]:
     return list(acf(values, nlags=max_lag)[1:])
 
 
-def adf_test(values: list[float]) -> tuple[float, float]:
+def adf_test(values: list[float], max_lag: int | None = None) -> tuple[float, float]:
     """Run an augmented Dickey-Fuller test.
 
     Returns:
         The test statistic and its p-value.
 
     """
-    statistic, p_value, *_ = adfuller(values, autolag="AIC")
+    statistic, p_value, *_ = adfuller(values, maxlag=max_lag, autolag="AIC")
+
+    return float(statistic), float(p_value)
+
+
+def arch_test(values: list[float], lags: int) -> tuple[float, float]:
+    """Run an ARCH-LM test for volatility clustering.
+
+    Returns:
+        The LM statistic and its p-value.
+
+    """
+    statistic, p_value, *_ = het_arch(asarray(values), nlags=lags)
 
     return float(statistic), float(p_value)
 

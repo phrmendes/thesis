@@ -5,6 +5,7 @@ from helpers.statistics import column_max, column_min, ratio
 RETURN_COLUMNS = [
     "mean_return",
     "median_return",
+    "geometric_return",
     "min_return",
     "max_return",
     "std_return",
@@ -17,21 +18,33 @@ RETURN_TABLE_COLUMNS = [
     "name",
     "rank_n",
     *RETURN_COLUMNS,
-    "n_weeks",
+    "n_days",
     "sharpe",
     "sortino",
 ]
 
 TOP_ASSETS = 10
 
+LARGE_RETURN = 0.5
+
 DISTRIBUTION_TYPE = pl.Enum(["capped", "raw"])
 
 
-def return_summary() -> list[pl.Expr]:
-    """Build the summary expressions of the weekly return.
+def geometric_mean(column: str) -> pl.Expr:
+    """Build the compound daily return of one return column: the exponential of the mean log return, minus one.
 
     Returns:
-        The mean, median, extremes, deviation, and negative-week deviation.
+        The expression.
+
+    """
+    return (1 + pl.col(column)).log().mean().exp() - 1
+
+
+def return_summary() -> list[pl.Expr]:
+    """Build the summary expressions of the daily return.
+
+    Returns:
+        The mean, median, compound return, extremes, deviation, and negative-day deviation.
 
     """
     returns = pl.col("return")
@@ -39,6 +52,7 @@ def return_summary() -> list[pl.Expr]:
     return [
         returns.mean().alias("mean_return"),
         returns.median().alias("median_return"),
+        geometric_mean("return").alias("geometric_return"),
         column_min("return").alias("min_return"),
         column_max("return").alias("max_return"),
         returns.std().alias("std_return"),
@@ -47,7 +61,7 @@ def return_summary() -> list[pl.Expr]:
 
 
 def with_return_ratios(summary: pl.DataFrame) -> pl.DataFrame:
-    """Add the weekly Sharpe and Sortino ratios.
+    """Add the daily Sharpe and Sortino ratios.
 
     Returns:
         The summary with the two ratio columns.
@@ -60,42 +74,42 @@ def with_return_ratios(summary: pl.DataFrame) -> pl.DataFrame:
 
 
 def pooled_return_row(prices: pl.DataFrame, name: str) -> pl.DataFrame:
-    """Summarize every weekly return of one frame as a single row.
+    """Summarize every daily return of one frame as a single row.
 
     Returns:
         One row with the pooled return statistics.
 
     """
-    weeks_per_asset = (pl.len() / pl.col("name").n_unique()).alias("n_weeks")
-    pooled = prices.select(*return_summary(), weeks_per_asset)
+    days_per_asset = (pl.col("return").count() / pl.col("name").n_unique()).alias("n_days")
+    pooled = prices.select(*return_summary(), days_per_asset)
 
     return with_return_ratios(pooled).with_columns(pl.lit(name).alias("name"))
 
 
-def asset_return_rows(prices: pl.DataFrame, min_weeks: int) -> pl.DataFrame:
-    """Rank the assets with enough weeks by their mean weekly return.
+def asset_return_rows(prices: pl.DataFrame, min_days: int) -> pl.DataFrame:
+    """Rank the assets with enough days by their compound daily return.
 
     Returns:
         One ranked row per asset.
 
     """
-    weeks = pl.col("return").count().alias("n_weeks")
-    summary = prices.group_by("name").agg(*return_summary(), weeks)
-    ranked = with_return_ratios(summary).filter(pl.col("n_weeks") >= min_weeks)
+    days = pl.col("return").count().alias("n_days")
+    summary = prices.group_by("name").agg(*return_summary(), days)
+    ranked = with_return_ratios(summary).filter(pl.col("n_days") >= min_days)
     rank = (pl.int_range(pl.len()) + 1).alias("rank_n")
 
-    return ranked.sort("mean_return", descending=True).with_columns(rank)
+    return ranked.sort("geometric_return", descending=True).with_columns(rank)
 
 
-def return_statistics(prices: pl.DataFrame, min_weeks: int | None = None) -> pl.DataFrame:
-    """Summarize weekly returns. The top rows are the best items with enough weeks.
+def return_statistics(prices: pl.DataFrame, min_days: int | None = None) -> pl.DataFrame:
+    """Summarize daily returns. The top rows are the best items with enough days.
 
     Returns:
         The top rows, the rest row, and the overall row.
 
     """
-    min_weeks = min_weeks if min_weeks is not None else load_params()["eda"]["item_min_weeks"]
-    top = asset_return_rows(prices, min_weeks).head(TOP_ASSETS)
+    min_days = min_days if min_days is not None else load_params()["eda"]["item_min_days"]
+    top = asset_return_rows(prices, min_days).head(TOP_ASSETS)
     rest = prices.filter(~pl.col("name").is_in(top["name"].to_list()))
     pooled_rows = [pooled_return_row(rest, "rest"), pooled_return_row(prices, "overall")]
 
@@ -111,12 +125,13 @@ def distribution_row(prices: pl.DataFrame, column: str, label: str) -> pl.DataFr
     """
     returns = pl.col(column)
     quantiles = [returns.quantile(level).alias(name) for name, level in QUANTILE_LEVELS.items()]
-    share_above_half = (returns.abs() > 0.5).mean().alias("share_above_half")
+    share_above_half = (returns.abs() > LARGE_RETURN).mean().alias("share_above_half")
 
     return prices.select(
         pl.lit(label, dtype=DISTRIBUTION_TYPE).alias("label"),
         pl.len().alias("n"),
         returns.mean().alias("mean"),
+        geometric_mean(column).alias("geometric_mean"),
         returns.std().alias("std"),
         returns.skew().alias("skewness"),
         returns.kurtosis().alias("excess_kurtosis"),
@@ -126,7 +141,7 @@ def distribution_row(prices: pl.DataFrame, column: str, label: str) -> pl.DataFr
 
 
 def return_distribution(prices: pl.DataFrame) -> pl.DataFrame:
-    """Compare the capped weekly return with the raw weekly return.
+    """Compare the capped daily return with the raw daily return.
 
     Returns:
         One row per return column.

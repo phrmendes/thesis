@@ -66,7 +66,6 @@ in
   tasks = {
     "thesis:build".exec = "pandoc --defaults pandoc.yaml thesis.md";
     "thesis:lint".exec = "nu-lint scripts -c nu-lint.toml";
-    "thesis:test".exec = "nu scripts/tests/test.nu";
     "thesis:completions" = {
       exec = ''
         mkdir -p "$DEVENV_STATE/share/nushell/vendor/autoload"

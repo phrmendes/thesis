@@ -1,14 +1,9 @@
-from datetime import date, timedelta
-
 import polars as pl
 from helpers.frames import record_frame
+from helpers.jumps import jump_rows
 from helpers.params import load_params
 
 CHEAP_PRICE = 1.0
-
-JUMP_THRESHOLD = 1.0
-
-REVERSAL_RANGE = (0.75, 1.25)
 
 
 def longest_unchanged_runs(valid: pl.DataFrame) -> pl.DataFrame:
@@ -25,7 +20,7 @@ def longest_unchanged_runs(valid: pl.DataFrame) -> pl.DataFrame:
 
 
 def unchanged_daily_share(valid: pl.DataFrame) -> float:
-    """Find the share of daily prices equal to the previous daily price.
+    """Find the share of daily prices equal to the previous observed daily price.
 
     Returns:
         The share of unchanged days.
@@ -37,44 +32,6 @@ def unchanged_daily_share(valid: pl.DataFrame) -> float:
     return ordered.select((change == 0).mean()).item()
 
 
-def weekly_jumps(weekly: pl.DataFrame) -> pl.DataFrame:
-    """Find the observed weeks where the raw return jumps, and mark the jumps that revert.
-
-    Returns:
-        One row per jump with a `reversed` flag.
-
-    """
-    next_price = pl.col("price").shift(-1).over("name")
-    previous_price = pl.col("price").shift(1).over("name")
-    is_jump = (pl.col("observed") == 1) & (pl.col("raw_return").abs() > JUMP_THRESHOLD)
-    low, high = REVERSAL_RANGE
-    is_reversed = (next_price / previous_price).is_between(low, high).alias("reversed")
-
-    return weekly.filter(is_jump).with_columns(is_reversed)
-
-
-def assets_ending_early(audit_rows: pl.DataFrame) -> int:
-    """Count the assets whose last valid week is older than the stale limit.
-
-    Returns:
-        The number of assets.
-
-    Raises:
-        TypeError: The audit frame has no last week.
-
-    """
-    last_week = audit_rows.filter(pl.col("positive"))["week"].max()
-
-    if not isinstance(last_week, date):
-        message = "the audit frame has no last week"
-        raise TypeError(message)
-
-    cutoff = last_week - timedelta(weeks=load_params()["clean"]["max_stale_weeks"])
-    last_valid_week = audit_rows.filter(pl.col("valid")).group_by("name").agg(pl.col("week").max().alias("last_week"))
-
-    return last_valid_week.filter(pl.col("last_week") < cutoff).height
-
-
 def audit_row_counts(rows: pl.DataFrame) -> pl.DataFrame:
     """Count the raw, daily, selected, and valid rows and assets.
 
@@ -82,7 +39,8 @@ def audit_row_counts(rows: pl.DataFrame) -> pl.DataFrame:
         One row with the row and asset counts of each cleaning stage.
 
     """
-    daily = rows.filter(pl.col("positive"))
+    positive = rows.filter(pl.col("positive"))
+    daily = positive.filter(pl.col("usable"))
     selected = rows.filter(pl.col("selected"))
     valid = rows.filter(pl.col("valid"))
 
@@ -90,6 +48,8 @@ def audit_row_counts(rows: pl.DataFrame) -> pl.DataFrame:
         {
             "raw_rows": rows.height,
             "raw_assets": rows["name"].n_unique(),
+            "snapshot_days": positive["date"].n_unique(),
+            "dropped_days": positive["date"].n_unique() - daily["date"].n_unique(),
             "daily_rows": daily.height,
             "daily_assets": daily["name"].n_unique(),
             "selected_assets": selected["name"].n_unique(),
@@ -121,23 +81,23 @@ def audit_stale_prices(valid: pl.DataFrame) -> pl.DataFrame:
     return pl.concat([share, runs], how="horizontal_extend")
 
 
-def audit_weekly_shares(weekly: pl.DataFrame) -> pl.DataFrame:
-    """Measure the share of weekly rows with each kind of value.
+def audit_daily_shares(prices: pl.DataFrame) -> pl.DataFrame:
+    """Measure the share of cleaned rows with each kind of value.
 
     Returns:
-        One row with the coverage shares, the zero and capped return counts, and the missing rarity share.
+        One row with the return and source shares, the zero and capped return counts, and the missing rarity share.
 
     """
     returns = pl.col("return")
+    cap = load_params()["clean"]["return_cap"]
 
-    return weekly.select(
-        (pl.col("observed").sum() / pl.len()).alias("observed_share"),
-        (pl.col("composite_close").count() / pl.len()).alias("composite_close_share"),
-        (pl.col("buff_close").count() / pl.len()).alias("buff_close_share"),
-        ((pl.col("active_days") > 0).sum() / pl.len()).alias("steam_24h_share"),
+    return prices.select(
+        returns.is_null().mean().alias("rows_without_return_share"),
+        (pl.col("composite_price").count() / pl.len()).alias("composite_price_share"),
+        (pl.col("buff_price").count() / pl.len()).alias("buff_price_share"),
         (pl.col("rarity").is_null().sum() / pl.len()).alias("missing_rarity_share"),
         (returns == 0.0).sum().alias("zero_returns"),
-        (returns.abs() == 1.0).sum().alias("capped_returns"),
+        (returns == cap).sum().alias("capped_returns"),
     )
 
 
@@ -148,42 +108,36 @@ def audit_metrics(rows: pl.DataFrame, prices: pl.DataFrame) -> pl.DataFrame:
         One row with the cleaning diagnostics.
 
     """
-    daily = rows.filter(pl.col("positive"))
+    daily = rows.filter(pl.col("positive") & pl.col("usable"))
     valid = rows.filter(pl.col("valid"))
     mean_prices = prices.group_by("name").agg(pl.col("price").mean().alias("mean_price"))
-    observed = prices.filter(pl.col("observed") == 1)
 
-    jumps = weekly_jumps(prices).select(
-        pl.len().alias("weekly_jumps"),
+    jumps = jump_rows(prices).select(
+        pl.len().alias("daily_jumps"),
         pl.col("reversed").sum().alias("reversed_jumps"),
     )
 
     price_dates = daily.select(
-        pl.col("week").min().alias("first_price_week"),
+        pl.col("date").min().alias("first_price_day"),
         pl.col("date").max().alias("last_price_day"),
     )
 
-    weekly_facts = prices.select(
-        pl.len().alias("weekly_rows"),
-        pl.col("name").n_unique().alias("weekly_assets"),
-        pl.col("week").min().alias("first_week"),
+    cleaned_facts = prices.select(
+        pl.len().alias("cleaned_rows"),
+        pl.col("name").n_unique().alias("cleaned_assets"),
     )
 
-    last_observed_week = observed.select(pl.col("week").max().alias("last_observed_week"))
     cheap_assets = mean_prices.select((pl.col("mean_price") < CHEAP_PRICE).sum().alias("assets_below_one"))
-    ending_early = record_frame({"assets_ending_early": assets_ending_early(rows)})
 
     return pl.concat(
         [
             audit_row_counts(rows),
             audit_stale_prices(valid),
-            audit_weekly_shares(prices),
-            weekly_facts,
+            audit_daily_shares(prices),
+            cleaned_facts,
             jumps,
-            ending_early,
             price_dates,
             cheap_assets,
-            last_observed_week,
         ],
         how="horizontal_extend",
     )

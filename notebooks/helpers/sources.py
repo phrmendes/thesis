@@ -3,35 +3,40 @@ from helpers.params import load_params
 
 EXPENSIVE_PRICE = 800
 
-SOURCE_TYPE = pl.Enum(["composite", "composite_800", "buff"])
+SOURCE_TYPE = pl.Enum(["steam_7d", "composite", "composite_800", "buff"])
 
 
-def source_return(column: str) -> pl.Expr:
-    """Build the capped weekly return of one source close.
+def source_returns(prices: pl.DataFrame, column: str) -> pl.DataFrame:
+    """Build the capped daily return of one source price, between two consecutive days with a source price.
 
     Returns:
-        The return expression, named `source_return`.
+        The rows of the source with a `source_return` column. Rows without a return are out.
 
     """
-    cap = load_params()["clean"]["return_cap"]
+    params = load_params()["clean"]
+    sources = prices.drop_nulls(column).sort("name", "date")
     previous = pl.col(column).shift(1).over("name")
+    gap = (pl.col("date") - pl.col("date").shift(1).over("name")).dt.total_days()
+    source_return = (pl.col(column) / previous - 1).clip(-params["return_cap"], params["return_cap"])
 
-    return (pl.col(column) / previous - 1).clip(-cap, cap).alias("source_return")
+    return (
+        sources.with_columns(source_return.alias("source_return"), gap.alias("gap"))
+        .filter(pl.col("gap") <= params["max_gap_days"])
+        .drop_nulls("source_return")
+    )
 
 
 def source_row(prices: pl.DataFrame, column: str, label: str) -> pl.DataFrame:
-    """Compare one source close with the main price: week share, median price ratio, and return correlation.
+    """Compare one source price with the main price: day share, median price ratio, and return correlation.
 
     Returns:
         One row of the sources table.
 
     """
-    is_observed = pl.col("observed") == 1
-    observed = prices.filter(is_observed)
-    week_share = (pl.col(column).count() / pl.len()).fill_nan(None).alias("week_share")
+    day_share = (pl.col(column).count() / pl.len()).alias("day_share")
     price_ratio = (pl.col("price") / pl.col(column)).median().alias("median_ratio")
-    totals = observed.select(pl.lit(label, dtype=SOURCE_TYPE).alias("source"), week_share, price_ratio)
-    returns = prices.with_columns(source_return(column)).filter(is_observed & pl.col("source_return").is_not_null())
+    totals = prices.select(pl.lit(label, dtype=SOURCE_TYPE).alias("source"), day_share, price_ratio)
+    returns = source_returns(prices, column).drop_nulls("return")
     correlation = pl.corr("return", "source_return").fill_nan(None).alias("return_correlation")
     pairs = returns.select(correlation, pl.len().alias("pairs"))
 
@@ -39,15 +44,16 @@ def source_row(prices: pl.DataFrame, column: str, label: str) -> pl.DataFrame:
 
 
 def source_comparison(prices: pl.DataFrame) -> pl.DataFrame:
-    """Compare the main price with the Steam and BUFF weekly closes.
+    """Compare the main price with the Steam 7-day price and the csgotrader and BUFF daily prices.
 
     Returns:
         One row per source.
 
     """
+    steam_7d = source_row(prices, "price_7d", "steam_7d")
     expensive = prices.filter(pl.col("price") >= EXPENSIVE_PRICE)
-    composite = source_row(prices, "composite_close", "composite")
-    composite_expensive = source_row(expensive, "composite_close", "composite_800")
-    buff = source_row(prices, "buff_close", "buff")
+    composite = source_row(prices, "composite_price", "composite")
+    composite_expensive = source_row(expensive, "composite_price", "composite_800")
+    buff = source_row(prices, "buff_price", "buff")
 
-    return pl.concat([composite, composite_expensive, buff])
+    return pl.concat([steam_7d, composite, composite_expensive, buff])
