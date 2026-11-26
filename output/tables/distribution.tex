@@ -1,20 +1,20 @@
-\begin{table}[H]
-\caption{Distribuição dos Retornos Diários — CS:GO}\label{tab:distribution} 
+\begingroup
+\setlength\LTleft{0\linewidth}
+\setlength\LTright{0\linewidth}
+\fontsize{9.5pt}{11.4pt}\selectfont
 
-\fontsize{12.0pt}{14.4pt}\selectfont
+\setlength{\LTpost}{0mm}
+\begin{longtable}{@{\extracolsep{\fill}}lrrrrrr}
 
-\resizebox{\ifdim\width>\linewidth\linewidth\else\width\fi}{!}{
-\begin{tabular}{lrrrrrrrrrrrr}
 \toprule
-\textbf{Retorno} & \textbf{Observações} & \textbf{Média} & \textbf{Composto} & \textbf{DP} & \textbf{Assimetria} & \textbf{Curtose em excesso} & \textbf{P1} & \textbf{P5} & \textbf{P50} & \textbf{P95} & \textbf{P99} & \textbf{|r| > 50\%} \\
+\textbf{Retorno} & \textbf{Observações} & \textbf{Média} & \textbf{Composto} & \textbf{DP} & \textbf{Assimetria} & \textbf{Curtose em excesso} \\ 
 \midrule\addlinespace[2.5pt]
-Limitado (500\%) & 5.106.536 & 0,95\% & 0,14\% & 16,02\% & 13,55 & 331,84 & -24,56\% & -12,71\% & 0,00\% & 14,62\% & 32,47\% & 0,81\% \\
-Bruto & 5.106.536 & 1,04\% & 0,15\% & 20,20\% & 36,62 & 3.188,93 & -24,56\% & -12,71\% & 0,00\% & 14,62\% & 32,47\% & 0,81\% \\
+Limitado (500\%) & 6.140.042 & 1,01\% & 0,18\% & 16,17\% & 13,22 & 324,31 \\
+Bruto & 6.140.042 & 1,10\% & 0,19\% & 20,48\% & 37,10 & 3.290,74 \\
 \bottomrule
-\end{tabular}
-}
-\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\end{longtable}
 \begin{minipage}{\linewidth}
+Fonte: Elaboração própria.\\
 DP: desvio padrão. Retornos de todos os itens reunidos. O retorno bruto não tem limite. O limite de 500\% reduz a média e o desvio padrão. Com ruído de preço, a média aritmética supera a mediana e o retorno composto.\\
 \end{minipage}
-\end{table}
+\endgroup

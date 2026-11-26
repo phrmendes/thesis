@@ -1,18 +1,21 @@
-\begin{table}[H]
-\caption{Saltos de Preço por Direção — CS:GO}\label{tab:jumps} 
+\begingroup
+\setlength\LTleft{0\linewidth}
+\setlength\LTright{0\linewidth}
+\fontsize{10.5pt}{12.6pt}\selectfont
 
-\fontsize{12.0pt}{14.4pt}\selectfont
+\setlength{\LTpost}{0mm}
+\begin{longtable}{@{\extracolsep{\fill}}lrrrr}
 
-\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lrrrr}
 \toprule
-\textbf{Direção} & \textbf{Saltos} & \textbf{Revertidos} & \textbf{Tamanho mediano} & \textbf{No treino} \\
+\textbf{Direção} & \textbf{Saltos} & \textbf{Revertidos} (1) & \textbf{Tamanho mediano} (2) & \textbf{No treinamento} \\ 
 \midrule\addlinespace[2.5pt]
-Alta: o preço dobra ou mais & 11.382 & 5,3\% & 195\% & 36,2\% \\
-Queda: o preço cai pela metade ou mais & 11.713 & 78,1\% & 66\% & 36,4\% \\
+Alta superior a 100\% & 12.056 & 5,7\% & 195\% & 27,8\% \\
+Queda superior a 50\% & 12.397 & 76,7\% & 66\% & 28,4\% \\
 \bottomrule
-\end{tabular*}
-\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\end{longtable}
 \begin{minipage}{\linewidth}
-Revertido: o preço seguinte volta para a faixa de 75\% a 125\% do preço anterior ao salto. Tamanho: variação do preço em módulo.\\
+Fonte: Elaboração própria.\\
+(1) O preço observado após o salto fica entre 75\% e 125\% do preço anterior ao salto.\\
+(2) Variação do preço em módulo.\\
 \end{minipage}
-\end{table}
+\endgroup

@@ -1,29 +1,31 @@
-\begin{table}[H]
-\caption{Comparação entre Regimes — CS:GO}\label{tab:regimes} 
+\begingroup
+\setlength\LTleft{0\linewidth}
+\setlength\LTright{0\linewidth}
+\fontsize{7.0pt}{8.4pt}\selectfont
 
-\fontsize{12.0pt}{14.4pt}\selectfont
+\setlength{\LTpost}{0mm}
+\begin{longtable}{@{\extracolsep{\fill}}llllll}
 
-\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lllll}
 \toprule
-\textbf{Métrica} & \textbf{Treino} & \textbf{Teste} & \textbf{Antes do CS2} & \textbf{Depois do CS2} \\
+\textbf{Métrica} & \textbf{Treinamento} & \textbf{Validação} & \textbf{Teste} & \textbf{Antes do CS2} & \textbf{Depois do CS2} (1) \\ 
 \midrule\addlinespace[2.5pt]
-Primeiro dia & 02/11/2020 & 09/12/2022 & 02/11/2020 & 27/09/2023 \\
-Último dia & 08/12/2022 & 30/10/2023 & 26/09/2023 & 30/10/2023 \\
-Dias & 715 & 306 & 993 & 28 \\
-Itens & 6.105 & 6.105 & 6.105 & 6.103 \\
-Retorno diário médio dos itens & 0,73\% & 1,48\% & 0,94\% & 1,43\% \\
-Retorno diário composto dos itens & 0,10\% & 0,23\% & 0,14\% & 0,24\% \\
-Desvio padrão dos retornos dos itens & 13,96\% & 20,01\% & 15,89\% & 20,23\% \\
-Retorno diário médio do mercado (peso igual) & 0,72\% & 1,45\% & 0,92\% & 1,46\% \\
-Retorno diário composto do mercado (peso igual) & 0,09\% & 0,22\% & 0,12\% & 0,26\% \\
-Retorno diário médio do mercado (peso por preço) & 0,13\% & 0,31\% & 0,18\% & 0,38\% \\
-Desvio padrão do retorno do mercado (peso igual) & 0,92\% & 1,30\% & 1,10\% & 1,20\% \\
-Autocorrelação do mercado (defasagem 1) & 0,3038 & 0,3711 & 0,4008 & 0,1708 \\
-Teste ADF do retorno do mercado (p-valor) & 0,000 & 0,000 & 0,000 & n/d \\
+Primeiro dia & 02/11/2020 & 25/04/2022 & 09/12/2022 & 02/11/2020 & 27/09/2023 \\
+Último dia & 24/04/2022 & 08/12/2022 & 30/10/2023 & 26/09/2023 & 30/10/2023 \\
+Dias & 511 & 204 & 306 & 993 & 28 \\
+Itens & 10.515 & 10.493 & 10.513 & 10.515 & 9.965 \\
+Retorno médio dos itens & 0,89\% & 0,69\% & 1,44\% & 1,00\% & 1,42\% \\
+Retorno composto dos itens & 0,18\% & 0,04\% & 0,26\% & 0,17\% & 0,27\% \\
+DP dos retornos dos itens & 14,66\% & 14,29\% & 19,45\% & 16,07\% & 19,71\% \\
+Retorno médio do mercado & 0,87\% & 0,70\% & 1,42\% & 0,99\% & 1,46\% \\
+Retorno composto do mercado & 0,16\% & 0,05\% & 0,25\% & 0,16\% & 0,31\% \\
+Retorno médio do mercado, por preço (2) & 0,26\% & 0,12\% & 0,39\% & 0,27\% & 0,49\% \\
+DP do retorno do mercado & 0,90\% & 0,95\% & 1,23\% & 1,06\% & 1,12\% \\
 \bottomrule
-\end{tabular*}
-\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\end{longtable}
 \begin{minipage}{\linewidth}
-O mercado é a média dos retornos diários dos itens, com peso igual ou com o preço do dia anterior com preço. O CS2 foi lançado em 27/09/2023, dentro do teste. O período depois do lançamento é curto.\\
+Fonte: Elaboração própria.\\
+Retornos diários. O mercado é a média dos retornos dos itens, com ponderação igual ou por preço (2). DP: desvio padrão.\\
+(1) O lançamento do CS2 ocorreu em 27/09/2023, durante o teste. O intervalo posterior é curto.\\
+(2) Ponderação pelo preço da observação anterior.\\
 \end{minipage}
-\end{table}
+\endgroup

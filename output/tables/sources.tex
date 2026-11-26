@@ -1,22 +1,24 @@
-\begin{table}[H]
-\caption{Preço Steam contra Outras Fontes — CS:GO}\label{tab:sources} 
+\begingroup
+\setlength\LTleft{0\linewidth}
+\setlength\LTright{0\linewidth}
+\fontsize{9.0pt}{10.8pt}\selectfont
 
-\fontsize{12.0pt}{14.4pt}\selectfont
+\setlength{\LTpost}{0mm}
+\begin{longtable}{@{\extracolsep{\fill}}lrrrr}
 
-\resizebox{\ifdim\width>\linewidth\linewidth\else\width\fi}{!}{
-\begin{tabular}{lrrrr}
 \toprule
-\textbf{Fonte} & \textbf{Dias com preço} & \textbf{Razão mediana (Steam / fonte)} & \textbf{Correlação dos retornos} & \textbf{Pares de dias} \\
+\textbf{Referência} & \textbf{Disponibilidade} & \textbf{Razão mediana} & \textbf{Correlação} & \textbf{Pares} \\ 
 \midrule\addlinespace[2.5pt]
-Média de 7 dias (Steam) & 100,0\% & 1,00 & 0,67 & 4.330.674 \\
-Índice csgotrader (todos os itens) & 92,5\% & 1,00 & 0,57 & 4.016.145 \\
-Índice csgotrader (preço ≥ US\$ 800) & 87,1\% & 1,01 & 0,03 & 8.805 \\
-BUFF (menor oferta) & 99,1\% & 1,28 & 0,01 & 4.291.192 \\
+Média Steam de 7 dias (1) & 100,0\% & 1,00 & 0,66 & 4.744.646 \\
+Índice csgotrader — amostra completa (2) & 92,8\% & 1,00 & 0,56 & 4.410.465 \\
+Índice csgotrader — Steam ≥ US\$ 800 (2) & 89,6\% & 0,99 & 0,03 & 16.065 \\
+BUFF (menor preço anunciado) & 99,1\% & 1,27 & 0,01 & 4.699.867 \\
 \bottomrule
-\end{tabular}
-}
-\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\end{longtable}
 \begin{minipage}{\linewidth}
-Preço principal: média de vendas da Steam nas últimas 24 horas. A média de 7 dias confere o preço de 24 horas. Os retornos usam dias consecutivos com preço nas duas fontes, limitados em 500\%. O índice csgotrader tem método próprio: média de vendas ajustada por tendência de mercado, e preço da BUFF acima de US\$ 800.\\
+Fonte: Elaboração própria.\\
+A disponibilidade é a parcela das observações que também contêm um valor na referência. Essa parcela considera apenas as observações com preço Steam de 24 horas. Não é uma contagem de dias distintos. A razão compara os valores do mesmo item e dia. Valores acima de 1 indicam preço Steam superior à referência. Cada observação pareada compara variações percentuais do mesmo item em dias consecutivos. As variações têm limite de 500\%.\\
+(1) A média de 7 dias usa períodos sobrepostos. Suas variações não equivalem aos retornos diários de preços.\\
+(2) O índice csgotrader é uma medida composta do autor, não um preço de venda.\\
 \end{minipage}
-\end{table}
+\endgroup

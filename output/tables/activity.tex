@@ -1,21 +1,23 @@
-\begin{table}[H]
-\caption{Parcela de Dias com Preço por Item — CS:GO}\label{tab:activity} 
-
+\begingroup
+\setlength\LTleft{0\linewidth}
+\setlength\LTright{0\linewidth}
 \fontsize{12.0pt}{14.4pt}\selectfont
 
-\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lr}
+\setlength{\LTpost}{0mm}
+\begin{longtable}{@{\extracolsep{\fill}}lr}
+
 \toprule
-\textbf{Dias com preço de 24 horas} & \textbf{Itens} \\
+\textbf{Dias com preço de 24 horas} & \textbf{Itens} \\ 
 \midrule\addlinespace[2.5pt]
-≤ 20\% & 0 \\
-20-40\% & 15 \\
-40-60\% & 981 \\
-60-80\% & 1.287 \\
-> 80\% & 3.822 \\
+≤ 20\% & 2.097 \\
+20-40\% & 1.841 \\
+40-60\% & 1.308 \\
+60-80\% & 1.348 \\
+\textgreater{} 80\% & 3.921 \\
 \bottomrule
-\end{tabular*}
-\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\end{longtable}
 \begin{minipage}{\linewidth}
-Parcela dos dias entre o primeiro e o último dia do item com preço de 24 horas, ou seja, com venda na Steam. Serve como medida indireta de liquidez.\\
+Fonte: Elaboração própria.\\
+Parcela dos dias com preço de 24 horas entre o primeiro e o último registro do item. Essa medida descreve a disponibilidade de preços, não o volume negociado.\\
 \end{minipage}
-\end{table}
+\endgroup

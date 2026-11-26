@@ -1,37 +1,42 @@
-\begin{table}[H]
-\caption{Auditoria da Limpeza — CS:GO}\label{tab:audit} 
-
+\begingroup
+\setlength\LTleft{0\linewidth}
+\setlength\LTright{0\linewidth}
 \fontsize{12.0pt}{14.4pt}\selectfont
 
-\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}ll}
+\setlength{\LTpost}{0mm}
+\begin{longtable}{@{\extracolsep{\fill}}ll}
+
 \toprule
-\textbf{Métrica} & \textbf{Valor} \\
+\textbf{Métrica} & \textbf{Valor} \\ 
 \midrule\addlinespace[2.5pt]
-Linhas brutas & 22.241.111 \\
-Itens brutos & 27.230 \\
-Dias com preço positivo & 1.077 \\
-Dias descartados (poucos preços) & 56 \\
-Linhas com preço positivo, em dias aproveitados & 12.549.791 \\
-Itens com preço positivo & 21.346 \\
-Itens selecionados pelo treino & 6.105 \\
-Linhas dos itens selecionados & 5.107.930 \\
-Linhas dentro dos limites de preço & 5.106.536 \\
-Linhas removidas pelos limites de preço & 1.394 \\
-Itens com linha válida & 6.105 \\
-Linhas limpas & 5.106.536 \\
-Dias com preço igual ao do dia anterior com preço & 5,42\% \\
-Maior sequência de preços iguais (dias) & 19 \\
-Itens com sequência acima de 28 dias & 0 \\
-Linhas sem retorno & 15,19\% \\
-Saltos diários (o preço dobra ou cai pela metade) & 23.095 \\
-Saltos revertidos & 9.745 \\
-Retornos limitados em 500\% & 1.003 \\
-Itens com preço médio abaixo de US\$ 1 & 29 \\
-Linhas sem raridade & 0,51\% \\
+Registros nos dados brutos & 22.241.111 \\
+Itens nos dados brutos & 27.230 \\
+Dias com preços positivos & 1.077 \\
+Dias excluídos por baixa cobertura (1) & 56 \\
+Registros com preço positivo em dias aproveitados & 12.549.791 \\
+Itens com preço positivo em dias aproveitados & 21.346 \\
+Itens selecionados com dados de treinamento & 10.515 \\
+Registros dos itens selecionados & 6.142.484 \\
+Registros dentro dos limites de preço & 6.140.042 \\
+Registros excluídos pelos limites de preço & 2.442 \\
+Itens com preços dentro dos limites & 10.515 \\
+Registros após a limpeza & 6.140.042 \\
+Parcela de preços iguais aos da observação anterior & 5,90\% \\
+Maior sequência de preços iguais (dias observados) & 23 \\
+Itens com preços iguais por mais de 28 dias observados & 0 \\
+Parcela de registros sem retorno & 22,73\% \\
+Saltos de preço (2) & 24.453 \\
+Saltos seguidos de reversão (3) & 10.180 \\
+Retornos no teto de 500\% & 1.140 \\
+Itens com preço médio inferior a US\$ 1 & 93 \\
+Registros sem informação de raridade & 0,43\% \\
 \bottomrule
-\end{tabular*}
-\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\end{longtable}
 \begin{minipage}{\linewidth}
-Linhas e itens depois de cada etapa da limpeza. Preço: média das vendas da Steam nas últimas 24 horas. Dia descartado: menos preços positivos que a metade do dia mediano, sinal de captura incompleta. Salto: o preço dobra ou cai pela metade de um dia com preço para o seguinte. Um salto reverte quando o preço seguinte fica entre 75\% e 125\% do preço anterior ao salto.\\
+Fonte: Elaboração própria.\\
+Registros e itens que permanecem após cada etapa da limpeza. O preço é a média das vendas na Steam nas últimas 24 horas.\\
+(1) A limpeza compara o número de preços positivos de cada dia com a mediana desse número na amostra. O dia fica fora da análise quando esse número não atinge 50\% da mediana.\\
+(2) O preço aumenta mais de 100\% ou diminui mais de 50\%.\\
+(3) O preço observado após o salto fica entre 75\% e 125\% do preço anterior ao salto.\\
 \end{minipage}
-\end{table}
+\endgroup

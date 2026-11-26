@@ -1,25 +1,28 @@
-\begin{table}[H]
-\caption{Retorno Diário do Mercado por Dia da Semana — CS:GO}\label{tab:weekday} 
-
+\begingroup
+\setlength\LTleft{0\linewidth}
+\setlength\LTright{0\linewidth}
 \fontsize{12.0pt}{14.4pt}\selectfont
 
-\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lrrrr}
+\setlength{\LTpost}{0mm}
+\begin{longtable}{@{\extracolsep{\fill}}lrrrrrr}
+
 \toprule
- & \multicolumn{2}{c}{\textbf{Peso igual}} & \multicolumn{2}{c}{\textbf{Peso por preço}} \\
-\cmidrule(lr){2-3} \cmidrule(lr){4-5}
-\textbf{Dia} & \textbf{Média} & \textbf{t} & \textbf{Média} & \textbf{t} \\
+ & \multicolumn{3}{c}{\textbf{Ponderação igual}} & \multicolumn{3}{c}{\textbf{Ponderado por preço}} \\ 
+\cmidrule(lr){2-4} \cmidrule(lr){5-7}
+\textbf{Dia} & \textbf{Média} & \textbf{t} & \textbf{p} (1) & \textbf{Média} & \textbf{t} & \textbf{p} (1) \\ 
 \midrule\addlinespace[2.5pt]
-Segunda & 0,97\% & 13,07 & 0,21\% & 3,32 \\
-Terça & 0,88\% & 11,34 & 0,11\% & 1,97 \\
-Quarta & 0,89\% & 9,70 & 0,12\% & 1,90 \\
-Quinta & 0,81\% & 6,96 & 0,17\% & 2,12 \\
-Sexta & 0,93\% & 9,25 & 0,12\% & 1,47 \\
-Sábado & 0,94\% & 8,07 & 0,29\% & 2,93 \\
-Domingo & 1,14\% & 14,19 & 0,29\% & 4,44 \\
+Segunda & 1,03\% & 14,87 & 0,000 & 0,25\% & 3,87 & 0,000 \\
+Terça & 0,93\% & 12,95 & 0,000 & 0,20\% & 3,57 & 0,000 \\
+Quarta & 0,96\% & 11,12 & 0,000 & 0,27\% & 4,10 & 0,000 \\
+Quinta & 0,89\% & 8,02 & 0,000 & 0,23\% & 3,14 & 0,002 \\
+Sexta & 0,98\% & 10,44 & 0,000 & 0,22\% & 2,76 & 0,006 \\
+Sábado & 1,01\% & 9,39 & 0,000 & 0,37\% & 4,01 & 0,000 \\
+Domingo & 1,21\% & 16,17 & 0,000 & 0,37\% & 6,05 & 0,000 \\
 \bottomrule
-\end{tabular*}
-\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\end{longtable}
 \begin{minipage}{\linewidth}
-Média do retorno do mercado em cada dia, com erros de Newey-West (7 defasagens). Teste conjunto de médias iguais: p = 0,028 (peso igual) e p = 0,153 (peso por preço).\\
+Fonte: Elaboração própria.\\
+Média do retorno de mercado em cada dia da semana, com erros-padrão de Newey-West. As defasagens seguem a regra apresentada por Wooldridge. Teste conjunto de médias iguais: p = 0,014 (ponderação igual) e p = 0,139 (ponderado por preço).\\
+(1) O p-valor testa se a média do dia é zero.\\
 \end{minipage}
-\end{table}
+\endgroup

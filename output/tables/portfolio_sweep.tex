@@ -1,22 +1,28 @@
-\begin{table}[H]
-\caption{Carteira por Número de Itens — CS:GO}\label{tab:portfolio_sweep} 
-
+\begingroup
+\setlength\LTleft{0\linewidth}
+\setlength\LTright{0\linewidth}
 \fontsize{12.0pt}{14.4pt}\selectfont
 
-\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}rrrr}
+\setlength{\LTpost}{0mm}
+\begin{longtable}{@{\extracolsep{\fill}}rrrrl}
+
 \toprule
-\textbf{Itens} & \textbf{ROI líquido} & \textbf{Sharpe} & \textbf{Sortino} \\
+\textbf{Itens} & \textbf{ROI líquido} & \textbf{Sharpe} & \textbf{Sortino} & \textbf{Escolha} \\ 
 \midrule\addlinespace[2.5pt]
-5 & 39,68\% & 0,049 & 0,067 \\
-10 & 36,42\% & 0,046 & 0,065 \\
-20 & 48,62\% & 0,053 & 0,083 \\
-50 & 66,84\% & 0,069 & 0,105 \\
-100 & 65,57\% & 0,093 & 0,122 \\
-200 & 52,50\% & 0,095 & 0,120 \\
+5 & -8,53\% & 0,012 & 0,013 &  \\
+10 & -8,40\% & 0,004 & 0,005 &  \\
+20 & -4,32\% & 0,006 & 0,008 &  \\
+50 & 0,67\% & 0,012 & 0,013 & Escolhida \\
+100 & -6,90\% & -0,010 & -0,009 &  \\
+200 & -13,16\% & -0,035 & -0,031 &  \\
+500 & -15,91\% & -0,051 & -0,042 &  \\
+1.000 & -16,24\% & -0,057 & -0,045 &  \\
+1.500 & -16,08\% & -0,057 & -0,044 &  \\
+2.000 & -16,46\% & -0,060 & -0,046 &  \\
 \bottomrule
-\end{tabular*}
-\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\end{longtable}
 \begin{minipage}{\linewidth}
-Itens ordenados pelo ROI de treino entre os que passam nos três limites. Razões diárias.\\
+Fonte: Elaboração própria.\\
+Itens em ordem decrescente de ROI no treinamento. Retornos da validação e razões diárias. A tabela inclui apenas tamanhos com itens elegíveis suficientes. A regra automática admite até 2,00 pontos percentuais abaixo do maior ROI e maximiza o Sharpe. Empates favorecem a menor carteira. Tamanho adotado: 50 itens. Somente a validação define a escolha automática.\\
 \end{minipage}
-\end{table}
+\endgroup

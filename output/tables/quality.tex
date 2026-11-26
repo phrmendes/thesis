@@ -1,24 +1,27 @@
-\begin{table}[H]
-\caption{Qualidade do Conjunto de Dados Limpo — CS:GO}\label{tab:quality} 
-
+\begingroup
+\setlength\LTleft{0\linewidth}
+\setlength\LTright{0\linewidth}
 \fontsize{12.0pt}{14.4pt}\selectfont
 
-\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}ll}
-\toprule
-\textbf{Métrica} & \textbf{Valor} \\
-\midrule\addlinespace[2.5pt]
-Registros & 5.106.536 \\
-Ativos distintos & 6.105 \\
-Dias distintos & 1.021 \\
-Mín. dias/ativo & 381 \\
-Média dias/ativo & 836,5 \\
-Máx. dias/ativo & 1.016 \\
-Dias com retorno positivo & 2.116.714 \\
-Dias com retorno negativo & 1.948.892 \\
-Dias com retorno zero & 265.068 \\
-Registros sem retorno & 775.862 \\
-\bottomrule
-\end{tabular*}
-\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\setlength{\LTpost}{0mm}
+\begin{longtable}{@{\extracolsep{\fill}}ll}
 
-\end{table}
+\toprule
+\textbf{Métrica} & \textbf{Valor} \\ 
+\midrule\addlinespace[2.5pt]
+Registros & 6.140.042 \\
+Itens distintos & 10.515 \\
+Dias distintos & 1.021 \\
+Mínimo de dias por item & 32 \\
+Média de dias por item & 583,9 \\
+Máximo de dias por item & 1.016 \\
+Dias com retorno positivo & 2.294.854 \\
+Dias com retorno negativo & 2.105.390 \\
+Dias com retorno zero & 344.403 \\
+Registros sem retorno & 1.395.395 \\
+\bottomrule
+\end{longtable}
+\begin{minipage}{\linewidth}
+Fonte: Elaboração própria.\\
+\end{minipage}
+\endgroup

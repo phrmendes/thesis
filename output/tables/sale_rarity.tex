@@ -1,31 +1,31 @@
-\begin{table}[H]
-\caption{Efeito da Promoção por Raridade — CS:GO}\label{tab:sale_rarity} 
-
+\begingroup
+\setlength\LTleft{0\linewidth}
+\setlength\LTright{0\linewidth}
 \fontsize{12.0pt}{14.4pt}\selectfont
 
-\resizebox{\ifdim\width>\linewidth\linewidth\else\width\fi}{!}{
-\begin{tabular}{lrrrrr}
+\setlength{\LTpost}{0mm}
+\begin{longtable}{@{\extracolsep{\fill}}lrrrrrrr}
+
 \toprule
- & \multicolumn{2}{c}{\textbf{Promoção, primeira metade}} & \multicolumn{2}{c}{\textbf{Pós-venda}} \\
-\cmidrule(lr){2-3} \cmidrule(lr){4-5}
-\textbf{Raridade} & \textbf{Itens} & \textbf{Coef.} & \textbf{t} & \textbf{Coef.} & \textbf{t} \\
+ &  & \multicolumn{3}{c}{\textbf{Promoção, primeira metade}} & \multicolumn{3}{c}{\textbf{Pós-promoção}} \\ 
+\cmidrule(lr){3-5} \cmidrule(lr){6-8}
+\textbf{Raridade} & \textbf{Itens} & \textbf{Coef.} & \textbf{t} & \textbf{p} & \textbf{Coef.} & \textbf{t} & \textbf{p} \\ 
 \midrule\addlinespace[2.5pt]
-Covert & 1.234 & -0,35\% & -2,01 & 0,28\% & 1,63 \\
-Restricted & 1.141 & -0,63\% & -2,57 & 0,47\% & 2,65 \\
-Classified & 906 & -0,57\% & -2,63 & 0,46\% & 2,68 \\
-Mil-Spec Grade & 826 & -0,83\% & -3,49 & 0,38\% & 1,86 \\
-High Grade & 571 & -0,69\% & -1,97 & 0,45\% & 1,81 \\
-Remarkable & 343 & -0,40\% & -1,32 & 0,58\% & 1,93 \\
-Industrial Grade & 296 & -0,67\% & -1,97 & 0,30\% & 1,35 \\
-Extraordinary & 239 & -0,23\% & -0,92 & 0,20\% & 0,88 \\
-Exotic & 159 & -0,28\% & -0,76 & 0,81\% & 2,42 \\
-Base Grade & 155 & -0,40\% & -2,08 & 0,26\% & 1,17 \\
-Consumer Grade & 155 & -0,88\% & -1,32 & -0,01\% & -0,01 \\
+Covert & 2.893 & -0,36\% & -1,94 & 0,053 & 0,26\% & 1,62 & 0,106 \\
+Restricted & 1.439 & -0,65\% & -2,74 & 0,006 & 0,47\% & 2,77 & 0,006 \\
+Classified & 1.149 & -0,58\% & -2,72 & 0,006 & 0,46\% & 2,75 & 0,006 \\
+Mil-Spec Grade & 1.142 & -0,79\% & -3,43 & 0,001 & 0,35\% & 1,76 & 0,079 \\
+High Grade & 879 & -0,69\% & -2,16 & 0,031 & 0,42\% & 1,82 & 0,069 \\
+Remarkable & 745 & -0,53\% & -1,96 & 0,050 & 0,55\% & 2,01 & 0,044 \\
+Exotic & 640 & -0,52\% & -1,72 & 0,085 & 0,65\% & 2,20 & 0,028 \\
+Extraordinary & 539 & -0,34\% & -1,39 & 0,164 & 0,13\% & 0,58 & 0,562 \\
+Industrial Grade & 446 & -0,69\% & -2,31 & 0,021 & 0,24\% & 1,23 & 0,218 \\
+Base Grade & 294 & -0,40\% & -2,06 & 0,039 & 0,24\% & 1,06 & 0,287 \\
+Consumer Grade & 275 & -0,92\% & -1,59 & 0,112 & -0,09\% & -0,25 & 0,805 \\
 \bottomrule
-\end{tabular}
-}
-\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\end{longtable}
 \begin{minipage}{\linewidth}
-Raridades com 100 itens ou mais, em ordem de tamanho. Mercado de peso igual dentro da raridade, com a mesma regressão da tabela de fases e erros de Newey-West.\\
+Fonte: Elaboração própria.\\
+Raridades com pelo menos 100 itens, em ordem decrescente do número de itens. Retorno com ponderação igual dentro de cada raridade e erros-padrão de Newey-West.\\
 \end{minipage}
-\end{table}
+\endgroup

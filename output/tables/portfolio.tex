@@ -1,22 +1,26 @@
-\begin{table}[H]
-\caption{Carteira de Compra e Retenção — CS:GO}\label{tab:portfolio} 
-
+\begingroup
+\setlength\LTleft{0\linewidth}
+\setlength\LTright{0\linewidth}
 \fontsize{12.0pt}{14.4pt}\selectfont
 
-\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}ll}
+\setlength{\LTpost}{0mm}
+\begin{longtable}{@{\extracolsep{\fill}}ll}
+
 \toprule
-\textbf{Métrica} & \textbf{Valor} \\
+\textbf{Métrica} & \textbf{Valor} \\ 
 \midrule\addlinespace[2.5pt]
-Itens & 10 \\
+Itens & 50 \\
 Dias de teste & 306 \\
-Taxa de venda (\%) & 15 \\
-ROI & 36,42\% \\
-Sharpe & 0,046 \\
-Sortino & 0,065 \\
+Taxa de venda em \% (1) & 15,00 \\
+ROI & 43,61\% \\
+Sharpe & 0,058 \\
+Sortino (2) & 0,080 \\
 \bottomrule
-\end{tabular*}
-\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\end{longtable}
 \begin{minipage}{\linewidth}
-Carteira igualmente ponderada nos dias de teste, sem rebalanceamento. Taxa de venda de 15\% no último dia (5\% Steam e 10\% do jogo). Razões diárias com taxa livre de risco zero. Sortino: média sobre o DP dos dias negativos. Sem preço no dia, a posição mantém o último preço.\\
+Fonte: Elaboração própria.\\
+Carteira igualmente ponderada nos dias de teste, sem rebalanceamento. Razões diárias com taxa livre de risco zero. Sem preço no dia, a posição mantém o último preço.\\
+(1) Taxa de venda de 15,00\% sobre a venda final.\\
+(2) O Sortino divide a média dos retornos diários pelo desvio-padrão amostral dos retornos negativos.\\
 \end{minipage}
-\end{table}
+\endgroup

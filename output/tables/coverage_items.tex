@@ -1,22 +1,25 @@
-\begin{table}[H]
-\caption{Persistência dos Itens — CS:GO}\label{tab:coverage_items} 
-
+\begingroup
+\setlength\LTleft{0\linewidth}
+\setlength\LTright{0\linewidth}
 \fontsize{12.0pt}{14.4pt}\selectfont
 
-\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lrr}
+\setlength{\LTpost}{0mm}
+\begin{longtable}{@{\extracolsep{\fill}}lrr}
+
 \toprule
-\textbf{Dias com preço} & \textbf{Itens (universo)} & \textbf{Itens selecionados} \\
+\textbf{Dias com preço} & \textbf{Universo de itens} (1) & \textbf{Itens selecionados} (2) \\ 
 \midrule\addlinespace[2.5pt]
-< 200 & 4.994 & 0 \\
-200-399 & 2.713 & 1 \\
-400-599 & 2.355 & 728 \\
-600-799 & 2.480 & 1.463 \\
-800-999 & 7.737 & 3.540 \\
-1000+ & 1.067 & 373 \\
+\textless{} 200 & 4.994 & 2.004 \\
+200-399 & 2.713 & 1.794 \\
+400-599 & 2.355 & 1.379 \\
+600-799 & 2.480 & 1.440 \\
+800-999 & 7.737 & 3.523 \\
+1000+ & 1.067 & 375 \\
 \bottomrule
-\end{tabular*}
-\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\end{longtable}
 \begin{minipage}{\linewidth}
-O universo conta todos os itens com preço positivo. A seleção usa só os dias de treino.\\
+Fonte: Elaboração própria.\\
+(1) O universo conta todos os itens com preço positivo.\\
+(2) A seleção usa só os dias de treinamento.\\
 \end{minipage}
-\end{table}
+\endgroup

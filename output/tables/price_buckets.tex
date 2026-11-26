@@ -1,23 +1,23 @@
-\begin{table}[H]
-\caption{Retornos Diários por Faixa de Preço — CS:GO}\label{tab:price_buckets} 
+\begingroup
+\setlength\LTleft{0\linewidth}
+\setlength\LTright{0\linewidth}
+\fontsize{8.0pt}{9.6pt}\selectfont
 
-\fontsize{12.0pt}{14.4pt}\selectfont
+\setlength{\LTpost}{0mm}
+\begin{longtable}{@{\extracolsep{\fill}}lrrrrrr}
 
-\resizebox{\ifdim\width>\linewidth\linewidth\else\width\fi}{!}{
-\begin{tabular}{lrrrrrr}
 \toprule
-\textbf{Preço diário (US\$)} & \textbf{Itens} & \textbf{Itens-dia} & \textbf{Preço mediano (US\$)} & \textbf{Média} & \textbf{DP} & \textbf{Retorno zero} \\
+\textbf{Preço diário (US\$)} & \textbf{Itens} & \textbf{N. de observações} & \textbf{Preço mediano (US\$)} & \textbf{Média} & \textbf{DP} & \textbf{Retorno zero} \\ 
 \midrule\addlinespace[2.5pt]
-≤ 5 & 3.975 & 2.414.348 & 2,06 & 1,05\% & 18,48\% & 8,0\% \\
-5-25 & 3.813 & 1.482.497 & 9,25 & 0,72\% & 11,41\% & 4,3\% \\
-25-100 & 2.076 & 640.844 & 52,83 & 0,63\% & 13,10\% & 3,6\% \\
-100-800 & 1.262 & 551.335 & 174,26 & 1,50\% & 17,46\% & 5,3\% \\
-> 800 & 137 & 17.512 & 1.006,09 & 3,56\% & 25,84\% & 12,2\% \\
+≤ 5 & 5.593 & 2.666.305 & 2,10 & 1,05\% & 18,46\% & 8,5\% \\
+5-25 & 6.124 & 1.738.886 & 9,40 & 0,81\% & 11,86\% & 5,4\% \\
+25-100 & 4.120 & 805.263 & 54,40 & 0,67\% & 13,47\% & 5,1\% \\
+100-800 & 3.387 & 886.056 & 184,48 & 1,65\% & 17,71\% & 8,5\% \\
+\textgreater{} 800 & 629 & 43.532 & 1.064,46 & 3,43\% & 25,25\% & 20,6\% \\
 \bottomrule
-\end{tabular}
-}
-\par\vspace{\belowcaptionskip}\footnotesize Fonte: Elaboração própria.\par
+\end{longtable}
 \begin{minipage}{\linewidth}
-DP: desvio padrão. Um item entra em mais de uma faixa quando o preço cruza a fronteira.\\
+Fonte: Elaboração própria.\\
+DP: desvio padrão. Um item entra em mais de uma faixa quando o preço cruza a fronteira. N. de observações: cada registro corresponde a um item em uma data. O mesmo item pode aparecer em várias datas.\\
 \end{minipage}
-\end{table}
+\endgroup
