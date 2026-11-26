@@ -117,7 +117,7 @@ regime_break = "2023-09-27"  # Include this date in the post-CS2 sample.
 [portfolios]
 roi_tolerance = 0.02  # Allow two percentage points below the best validation ROI.
 rank = "roi"  # Rank eligible items on training data.
-net_sale_share = 0.85  # Retain this fraction after the final-sale fee.
+net_sale_share = 0.90  # Retain this fraction after a 10% final-sale fee, as in Guede-Fernández et al. (2025).
 min_roi = 0.05  # Use decimal ROI from the selection history.
 min_sharpe = 0.04  # Use daily selection ratios without annualization.
 min_sortino = 0.08

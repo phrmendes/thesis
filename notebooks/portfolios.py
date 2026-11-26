@@ -127,7 +127,7 @@ BENCHMARK_LABELS = {
 # Guede-Fernández et al. (2025) usam Sharpe ≥ 1, Sortino ≥ 2 e ROI ≥ 5%, mas não informam a frequência dos
 # retornos. Por isso, seus limites não são diretamente comparáveis aos limites diários deste trabalho.
 #
-# Este trabalho usa a taxa de venda definida nos parâmetros. O artigo adota uma taxa de 10%.
+# Este trabalho adota a mesma taxa de venda de 10% do artigo, aplicada uma única vez na venda final.
 # Os autores também exigem histórico diário completo. Este trabalho exige um mínimo de observações no treinamento
 # e não preenche preços ausentes. A tabela informa quantos candidatos atendem a cada critério.
 

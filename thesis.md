@@ -140,6 +140,7 @@ Os resultados representam o desempenho das regras sob essas hipóteses, não a r
 - A fonte é secundária: a csgotrader.app lê médias agregadas da steamapis. Não há volume, número de negócios nem diferença entre oferta e demanda. Por isso o trabalho não repete os testes de volume e de spread de Glaus (2022) e não separa ruído de valor.
 - A janela tem dez promoções da Steam. O poder para testar o efeito de promoção é limitado, e os resultados descrevem uma associação, não uma causa. Não há controle para outros eventos do calendário, como torneios.
 - O preço de 24 horas é uma média de vendas, não um preço executável. Não há livro de ofertas, então deslizamento e profundidade de mercado ficam fora do modelo.
+- A taxa de venda de 10% segue Guede-Fernández et al. (2025) e corresponde à taxa do jogo. A Steam cobra ainda 5% do comprador, que o cálculo não inclui. A taxa vale apenas na venda final.
 - Os fundos da carteira Steam não podem ser sacados. O preço da Steam é cerca de 1,28 vez o da BUFF, então o valor em dinheiro é menor que o ROI líquido calculado.
 - Dias com captura incompleta foram descartados (56 dias), e 16 dias não têm instantâneo. A fonte não publica dias depois de 30/10/2023, então só 28 dias seguem o lançamento do CS2.
 - Itens sem ordens ativas não têm histórico na Steam. Isso gera viés de sobrevivência na fonte, como Glaus (2022) aponta.
