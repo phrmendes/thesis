@@ -7,26 +7,12 @@
 
 let
   at = inputs.academic-templates.packages.${pkgs.stdenv.hostPlatform.system}.academic-templates;
-  python = pkgs.python314.withPackages (
-    ps: with ps; [
-      altair
-      catboost
-      great-tables
-      ipython
-      jupyterlab
-      jupytext
-      polars
-      scikit-learn
-      statsmodels
-      vl-convert-python
-      (ps.callPackage ./mapie.nix { })
-    ]
-  );
 in
 {
   name = "thesis";
 
   env.XDG_DATA_DIRS = "${config.devenv.state}/share";
+  env.IPYTHONDIR = "${config.devenv.root}/ipython";
 
   languages = {
     texlive = {
@@ -35,14 +21,22 @@ in
     };
     python = {
       enable = true;
+      package = pkgs.python314;
       lsp.package = pkgs.pyrefly;
-      package = python;
+      manylinux.enable = true;
+      venv.enable = true;
+      uv = {
+        enable = true;
+        sync = {
+          enable = true;
+          arguments = [ "--frozen" ];
+        };
+      };
     };
   };
 
   packages = with pkgs; [
     (nushell.withPlugins (with nushellPlugins; [ polars ]))
-    duckdb
     gfortran
     graphviz
     gzip

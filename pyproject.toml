@@ -1,3 +1,27 @@
+[project]
+name = "thesis"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+  "altair==6.3.0",
+  "catboost==1.2.10",
+  "css-inline==0.22.0",
+  "great-tables==1.1.0",
+  "ipython==9.18.1",
+  "jupyterlab==4.6.6",
+  "jupytext==1.19.6",
+  "mapie==1.6.0",
+  "msgspec==0.22.0",
+  "polars==2.1.0",
+  "scikit-learn==1.9.1",
+  "statsmodels==0.15.0",
+  "vl-convert-python==1.9.0.post1",
+]
+
+[tool.uv]
+package = false
+no-build = true
+
 [tool.ruff]
 target-version = "py314"
 line-length = 120
@@ -27,11 +51,15 @@ ignore-errors-in-generated-code = false
 "notebooks/*.py" = [
   "B018", # A notebook cell ends with a bare expression that Jupyter displays.
 ]
+"ipython/profile_default/ipython_config.py" = [
+  "F821",   # IPython injects `get_config` when it loads the file.
+  "INP001", # IPython loads the file as a script, not as a package.
+]
 "notebooks/**/*" = [
-  "INP001",   # The notebooks are scripts, not a package.
-  "D104",     # A package marker stays empty.
-  "T201",     # The notebooks print the path of each written file.
-  "RUF069",   # A weekly return of exactly zero is a real observation, not float noise.
+  "INP001", # The notebooks are scripts, not a package.
+  "D104",   # A package marker stays empty.
+  "T201",   # The notebooks print the path of each written file.
+  "RUF069", # A weekly return of exactly zero is a real observation, not float noise.
 ]
 
 [tool.jupytext]
