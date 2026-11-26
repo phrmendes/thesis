@@ -1,0 +1,132 @@
+[helpers]
+locale = "pt-BR"
+font_family = "Liberation Serif"
+date_format = "%d/%m/%Y"
+table_source = "Fonte: Elaboração própria."
+heading_align = "center"
+title_anchor = "middle"  # Anchor chart titles to the plot area.
+title_align = "center"
+legend_orient = "right"
+chart_width = 640  # Measure chart dimensions in pixels.
+chart_height = 360
+png_scale = 2.0  # Multiply PNG pixel dimensions.
+item_min_days = 400  # Count observed returns, not calendar days.
+expensive_price = 800  # Use USD for source comparisons and the last price boundary.
+
+[data_quality]
+top_jump_days = 10
+cheap_price = 1.0  # Use USD for the audit's low-price count.
+up_jump = 1.0  # Express raw returns in decimal units.
+down_jump = -0.5
+reversal_range = [0.75, 1.25]  # Bound the next-price / pre-jump-price ratio.
+day_bucket_breaks = [199, 399, 599, 799, 999]  # Count observed price dates.
+day_bucket_labels = ["< 200", "200-399", "400-599", "600-799", "800-999", "1000+"]
+share_bucket_breaks = [0.2, 0.4, 0.6, 0.8]  # Divide observed dates by the inclusive date span.
+share_bucket_labels = ["≤ 20%", "20-40%", "40-60%", "60-80%", "> 80%"]
+
+[returns]
+bin_width = 0.05  # Use decimal-return units.
+raw_ceiling = 5.0  # Limit the visible range without clipping returns.
+top_assets = 10  # Exclude pooled summary rows from this count.
+large_return = 0.5  # Compare absolute decimal returns.
+grid_points = 200
+grid_padding = 0.25  # Use a fraction of the percentile span.
+grid_percentiles = [1, 99]  # Set bounds before adding padding.
+price_bucket_breaks = [5, 25, 100]  # Append helpers.expensive_price as the last boundary.
+price_bucket_labels = ["≤ 5", "5-25", "25-100", "100-800", "> 800"]
+density_width = 420  # Measure each panel in pixels.
+density_height = 240
+density_columns = 2
+density_opacity = 0.15
+
+[market]
+lags = [1, 2, 3, 7]  # Count market observations, but exact calendar days within items.
+volatility_days = 91  # Count observations, not calendar days.
+index_height = 220  # Measure panel heights in pixels.
+volatility_height = 140
+line_styles = [[1, 0], [1, 0], [6, 4], [2, 3]]  # List on/off lengths: index, volatility, announcement, release.
+
+[[market.events]]
+name = "CS2 announcement"
+date = "2023-03-22"
+
+[[market.events]]
+name = "CS2 release"
+date = "2023-09-27"
+
+[calendar_effects]
+min_segment_items = 100  # Require distinct items per rarity.
+sensitivity_lags = [5, 6, 7, 14]  # Count observations in Newey-West bandwidths.
+turn_of_year_start = "12-25"  # Include both MM-DD endpoints.
+turn_of_year_end = "01-07"
+sale_lag_days = 0  # Add calendar days to every promotion phase.
+
+[[calendar_effects.sale_periods]]  # Use inclusive SteamDB dates.
+season = "autumn"
+start = "2020-11-25"
+end = "2020-12-01"
+
+[[calendar_effects.sale_periods]]
+season = "winter"
+start = "2020-12-22"
+end = "2021-01-05"
+
+[[calendar_effects.sale_periods]]
+season = "summer"
+start = "2021-06-24"
+end = "2021-07-08"
+
+[[calendar_effects.sale_periods]]
+season = "autumn"
+start = "2021-11-24"
+end = "2021-12-01"
+
+[[calendar_effects.sale_periods]]
+season = "winter"
+start = "2021-12-22"
+end = "2022-01-05"
+
+[[calendar_effects.sale_periods]]
+season = "summer"
+start = "2022-06-23"
+end = "2022-07-07"
+
+[[calendar_effects.sale_periods]]
+season = "autumn"
+start = "2022-11-22"
+end = "2022-11-29"
+
+[[calendar_effects.sale_periods]]
+season = "winter"
+start = "2022-12-22"
+end = "2023-01-05"
+
+[[calendar_effects.sale_periods]]
+season = "spring"
+start = "2023-03-16"
+end = "2023-03-23"
+
+[[calendar_effects.sale_periods]]
+season = "summer"
+start = "2023-06-29"
+end = "2023-07-13"
+
+[evaluation]
+regime_break = "2023-09-27"  # Include this date in the post-CS2 sample.
+
+[portfolios]
+roi_tolerance = 0.02  # Allow two percentage points below the best validation ROI.
+rank = "roi"  # Rank eligible items on training data.
+net_sale_share = 0.85  # Retain this fraction after the final-sale fee.
+min_roi = 0.05  # Use decimal ROI from the selection history.
+min_sharpe = 0.04  # Use daily selection ratios without annualization.
+min_sortino = 0.08
+max_stale_days = 7  # Count calendar days before each holding period.
+price_window_days = 7  # Use observed-price medians for training, entry, and exit.
+random_draws = 1000  # Sample portfolios per comparison universe.
+seed = 42
+k_sweep = [5, 10, 20, 50, 100, 200, 500, 1000, 1500, 2000]
+
+[sensitivity]
+sale_shifts = [-1, 1]  # Offset promotion dates in calendar days.
+price_window_days = 1  # Override the observed-price window for this check.

@@ -1,15 +1,16 @@
 import polars as pl
-from helpers.frames import bucket_label
+from helpers.frames import build_bucket_label
+from helpers.parameters import parameters
 from helpers.sources import EXPENSIVE_PRICE
 
-PRICE_BUCKET_LABELS = ("≤ 5", "5-25", "25-100", "100-800", "> 800")
+PRICE_BUCKET_LABELS = tuple(parameters().returns.price_bucket_labels)
 
-PRICE_BUCKET_BREAKS = (5, 25, 100, EXPENSIVE_PRICE)
+PRICE_BUCKET_BREAKS = (*parameters().returns.price_bucket_breaks, EXPENSIVE_PRICE)
 
 NO_RARITY = "Sem raridade"
 
 
-def rarity_segment() -> pl.Expr:
+def build_rarity_segment() -> pl.Expr:
     """Name the rarity of each row, with a label for a missing rarity.
 
     Returns:
@@ -19,17 +20,17 @@ def rarity_segment() -> pl.Expr:
     return pl.col("rarity").cast(pl.String).fill_null(NO_RARITY)
 
 
-def price_segment() -> pl.Expr:
+def build_price_segment() -> pl.Expr:
     """Label each row with its daily price bucket in USD.
 
     Returns:
         The bucket label as an enum in the bucket order.
 
     """
-    return bucket_label("price", PRICE_BUCKET_BREAKS, PRICE_BUCKET_LABELS)
+    return build_bucket_label("price", PRICE_BUCKET_BREAKS, PRICE_BUCKET_LABELS)
 
 
-def segment_summary(prices: pl.DataFrame, segment: pl.Expr) -> pl.DataFrame:
+def summarize_segments(prices: pl.DataFrame, segment: pl.Expr) -> pl.DataFrame:
     """Summarize the daily item returns of each segment.
 
     Returns:

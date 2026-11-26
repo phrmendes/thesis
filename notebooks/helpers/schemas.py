@@ -1,20 +1,28 @@
 from typing import TYPE_CHECKING, Literal
 
 import polars as pl
-from helpers.params import load_params
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-PERIODS = ("training", "testing")
+PERIODS = ("training", "validation", "testing")
 
 SELECTION_REASONS = ("selected", "low_price", "few_observations", "no_training_data")
 
-SALE_SEASONS = ["none", *dict.fromkeys(period["season"] for period in load_params()["sale_periods"])]
-
-TableName = Literal["prices", "assets", "audit"]
+TableName = Literal["prices", "assets", "audit", "portfolio", "portfolio_universe"]
 
 SCHEMAS: dict[TableName, pl.Schema] = {
+    "portfolio": pl.Schema(
+        {
+            "assets": pl.Int32(),
+            "days": pl.UInt32(),
+            "sale_fee": pl.Float64(),
+            "roi": pl.Float64(),
+            "sharpe": pl.Float64(),
+            "sortino": pl.Float64(),
+        }
+    ),
+    "portfolio_universe": pl.Schema({"name": pl.String()}),
     "prices": pl.Schema(
         {
             "name": pl.String(),
@@ -24,7 +32,6 @@ SCHEMAS: dict[TableName, pl.Schema] = {
             "price": pl.Float64(),
             "return": pl.Float64(),
             "raw_return": pl.Float64(),
-            "sale_season": pl.Enum(SALE_SEASONS),
             "price_7d": pl.Float64(),
             "composite_price": pl.Float64(),
             "buff_price": pl.Float64(),

@@ -1,152 +1,163 @@
 # %% [markdown]
-# # Desenho da avaliação dos resultados
+# # Períodos de treinamento, validação e teste
 #
-# Este caderno define como o modelo e a carteira serão julgados. Primeiro compara os regimes do mercado: o
-# treino contra o teste, e os dias antes contra os dias depois do lançamento do CS2. Depois mostra os folds
-# da avaliação com janela crescente.
+# Este notebook compara as estatísticas dos períodos de treinamento, validação e teste.
+# A análise também compara os períodos anterior e posterior ao lançamento do CS2.
+#
+# Também apresenta a divisão cronológica prevista para avaliar o modelo.
 
-# %%
-from argparse import ArgumentParser
-from pathlib import Path
-
+# %% jupyter={"source_hidden": true}
 import polars as pl
-from great_tables import GT
-from helpers.evaluation import walk_forward_splits
-from helpers.export import inline_table_styles, write_outputs
-from helpers.formatting import SEP_MARK, metric_text_table
-from helpers.market import market_series, regime_summary
-from helpers.params import load_params
-from helpers.paths import repo
-from helpers.runtime import notebook_arguments
+from great_tables import GT, md
+from great_tables.vals import fmt_integer, fmt_percent
+from helpers.evaluation import summarize_evaluation_split
+from helpers.export import enable_inline_table_styles, write_outputs
+from helpers.formatting import DATE_FORMAT, LOCALE, TABLE_SOURCE, build_metric_table
+from helpers.market import get_market_series, summarize_regimes
+from helpers.parameters import parameters
+from helpers.paths import get_repo_root
 from helpers.schemas import read_table
 
-# %%
-# GitHub drops style blocks, so the tables keep their styles inline.
-inline_table_styles()
+enable_inline_table_styles()
 
-REGIME_COLUMNS = ["training", "testing", "pre_cs2", "post_cs2"]
+notebook_parameters = parameters().evaluation
+
+paths = parameters().paths
+
+prices_path = get_repo_root() / paths.prices
+
+tables_path = get_repo_root() / paths.tables
+
+tables: dict[str, GT] = {}
+
+PERIOD_LABELS = {"training": "Treinamento", "validation": "Validação", "testing": "Teste"}
+
+REGIME_COLUMNS = [*PERIOD_LABELS, "pre_cs2", "post_cs2"]
 
 REGIME_LABELS = {
     "first_day": "Primeiro dia",
     "last_day": "Último dia",
     "days": "Dias",
     "assets": "Itens",
-    "mean_return": "Retorno diário médio dos itens",
-    "geometric_return": "Retorno diário composto dos itens",
-    "std_return": "Desvio padrão dos retornos dos itens",
-    "market_mean_return": "Retorno diário médio do mercado (peso igual)",
-    "market_geometric_return": "Retorno diário composto do mercado (peso igual)",
-    "weighted_mean_return": "Retorno diário médio do mercado (peso por preço)",
-    "market_std_return": "Desvio padrão do retorno do mercado (peso igual)",
-    "market_lag_1": "Autocorrelação do mercado (defasagem 1)",
-    "adf_return_p_value": "Teste ADF do retorno do mercado (p-valor)",
+    "mean_return": "Retorno médio dos itens",
+    "geometric_return": "Retorno composto dos itens",
+    "std_return": "DP dos retornos dos itens",
+    "market_mean_return": "Retorno médio do mercado",
+    "market_geometric_return": "Retorno composto do mercado",
+    "weighted_mean_return": "Retorno médio do mercado, por preço (2)",
+    "market_std_return": "DP do retorno do mercado",
 }
 
-REGIME_FORMATS = {
-    "first_day": "%d/%m/%Y",
-    "last_day": "%d/%m/%Y",
-    "days": "d",
-    "assets": "d",
-    "mean_return": ".2%",
-    "geometric_return": ".2%",
-    "std_return": ".2%",
-    "market_mean_return": ".2%",
-    "market_geometric_return": ".2%",
-    "weighted_mean_return": ".2%",
-    "market_std_return": ".2%",
-    "market_lag_1": ".4f",
-    "adf_return_p_value": ".3f",
-}
+
+prices = read_table("prices", prices_path)
 
 # %% [markdown]
-# ## Argumentos da linha de comando
-
-# %%
-parser = ArgumentParser(description="Avaliação: regimes do mercado e folds com janela crescente.")
-parser.add_argument("--prices", type=Path, default=repo() / "files/prices.parquet", help="Preços diários limpos.")
-parser.add_argument("--tables", type=Path, default=repo() / "output/tables", help="Pasta para os arquivos das tabelas.")
-args = parser.parse_args(notebook_arguments())
-
-# %%
-prices = read_table("prices", args.prices)
-market = market_series(prices)
-
-# %% [markdown]
-# ## Comparar os regimes do mercado
+# ## Tamanho da amostra, retornos e volatilidade por período
 #
-# O período de teste contém a transição para o CS2. Comparar treino e teste, e os dias antes e depois do
-# lançamento do CS2, mostra se retorno, volatilidade e persistência mudam de regime. Uma mudança enfraquece
-# qualquer avaliação fora da amostra, da carteira ao modelo. O período depois do lançamento é curto.
+# A tabela apresenta o número de dias e itens, os retornos e a volatilidade de cada período.
+# Diferenças entre treinamento, validação e teste descrevem mudanças nas características dos dados.
+#
+# A análise também compara os períodos anterior e posterior ao lançamento do CS2. O intervalo após o
+# lançamento é curto e limita essa comparação.
 
 # %%
-regimes = regime_summary(prices, market)
-regime_texts = {
-    regime: metric_text_table(regimes.filter(pl.col("regime") == regime), REGIME_LABELS, REGIME_FORMATS)
+market = get_market_series(prices)
+
+regimes = summarize_regimes(prices, market)
+
+regime_values = regimes.with_columns(
+    pl.col("first_day", "last_day").dt.strftime(DATE_FORMAT),
+    fmt_integer(pl.col("days", "assets"), locale=LOCALE),
+    fmt_percent(pl.exclude("regime", "first_day", "last_day", "days", "assets"), decimals=2, locale=LOCALE),
+)
+
+regime_summaries = {
+    regime: build_metric_table(regime_values.filter(pl.col("regime") == regime), REGIME_LABELS)
     for regime in REGIME_COLUMNS
 }
 
-regimes_text = (
-    regime_texts["training"]
+regime_comparison = (
+    regime_summaries["training"]
     .rename({"metric_value": "training"})
-    .with_columns(**{regime: regime_texts[regime]["metric_value"] for regime in REGIME_COLUMNS[1:]})
+    .with_columns(**{regime: regime_summaries[regime]["metric_value"] for regime in REGIME_COLUMNS[1:]})
 )
 
-regimes_gt = (
-    GT(regimes_text)
-    .tab_header(title="Comparação entre Regimes — CS:GO")
-    .cols_label(
-        metric_name="Métrica", training="Treino", testing="Teste", pre_cs2="Antes do CS2", post_cs2="Depois do CS2"
-    )
+tables["regimes"] = (
+    GT(regime_comparison, locale=LOCALE)
+    .tab_options(table_font_size="7pt")
+    .tab_source_note(TABLE_SOURCE)
     .tab_source_note(
-        "O mercado é a média dos retornos diários dos itens, com peso igual ou com o preço do dia anterior com preço. "
-        "O CS2 foi lançado em 27/09/2023, dentro do teste. O período depois do lançamento é curto."
+        "Retornos diários. O mercado é a média dos retornos dos itens, com ponderação igual ou por preço (2). "
+        "DP: desvio padrão."
     )
+    .cols_label(
+        metric_name=md("**Métrica**"),
+        training=md("**Treinamento**"),
+        validation=md("**Validação**"),
+        testing=md("**Teste**"),
+        pre_cs2=md("**Antes do CS2**"),
+        post_cs2=md("**Depois do CS2** (1)"),
+    )
+    .tab_source_note("(1) O lançamento do CS2 ocorreu em 27/09/2023, durante o teste. O intervalo posterior é curto.")
+    .tab_source_note("(2) Ponderação pelo preço da observação anterior.")
 )
-regimes_gt
 
 # %% [markdown]
-# ## Definir os folds da avaliação
+# **Comparação entre períodos — CS:GO**
+
+# %% jupyter={"source_hidden": true}
+tables["regimes"]
+
+# %% [markdown]
+# ## Divisão cronológica entre treinamento, validação e teste
 #
-# O modelo será avaliado com janelas de treino crescentes e um dia de embargo entre treino e teste. Vários
-# folds mostram se o desempenho muda com o regime, o que uma única divisão 70/30 não mostra.
+# A limpeza define três períodos consecutivos, sem sorteio de datas ou itens.
+# O treinamento define a seleção inicial. A validação escolhe o tamanho da carteira e os parâmetros do modelo.
+# O teste avalia as estratégias após essas escolhas. Todos os itens de uma data pertencem ao mesmo período.
+#
+# Após a validação, o treinamento e a validação formam o histórico disponível para a seleção final.
+# Qualquer intervalo adicional entre períodos depende do alvo e do horizonte de previsão do modelo.
 
 # %%
-eval_params = load_params()["eval"]
+split_summary = summarize_evaluation_split(prices)
 
-folds = walk_forward_splits(
-    prices["date"].unique().to_list(),
-    eval_params["initial_days"],
-    eval_params["step_days"],
-    eval_params["horizon_days"],
-)
+evaluation_split = pl.concat(
+    [
+        split_summary.select(
+            pl.lit(label).alias("period"),
+            pl.col(f"{period}_start").alias("start"),
+            pl.col(f"{period}_end").alias("end"),
+            pl.col(f"{period}_days").alias("days"),
+            pl.col(f"{period}_records").alias("records"),
+        )
+        for period, label in PERIOD_LABELS.items()
+    ]
+).with_columns(pl.col("start", "end").dt.strftime(DATE_FORMAT))
 
-folds_text = folds.with_columns(
-    pl.col("train_end").dt.strftime("%d/%m/%Y"),
-    pl.col("test_start").dt.strftime("%d/%m/%Y"),
-    pl.col("test_end").dt.strftime("%d/%m/%Y"),
-)
-
-folds_gt = (
-    GT(folds_text.select("fold", "train_days", "train_end", "test_start", "test_end", "test_days"))
-    .tab_header(title="Folds da Avaliação com Janela Crescente — CS:GO")
-    .fmt_integer(columns=["fold", "train_days", "test_days"], sep_mark=SEP_MARK)
-    .cols_label(
-        fold="Fold",
-        train_days="Dias de treino",
-        train_end="Fim do treino",
-        test_start="Início do teste",
-        test_end="Fim do teste",
-        test_days="Dias de teste",
-    )
+tables["evaluation_split"] = (
+    GT(evaluation_split, locale=LOCALE)
+    .tab_source_note(TABLE_SOURCE)
     .tab_source_note(
-        "O treino começa no primeiro dia e cresce a cada fold. Um dia de embargo separa treino e teste. "
-        "Os dias contam só dias com preço."
+        "A tabela descreve os preços disponíveis. O número de observações utilizáveis depende das variáveis "
+        "e do alvo do modelo."
     )
+    .fmt_integer(columns=["days", "records"])
+    .cols_label(
+        period=md("**Período**"),
+        start=md("**Início**"),
+        end=md("**Fim**"),
+        days=md("**Dias** (1)"),
+        records=md("**Registros** (2)"),
+    )
+    .tab_source_note("(1) Contagem de datas distintas com pelo menos um preço observado.")
+    .tab_source_note("(2) Cada registro corresponde a um item em uma data, com preço observado.")
 )
-folds_gt
 
 # %% [markdown]
-# ## Exportar tabelas LaTeX
+# **Divisão cronológica entre treinamento, validação e teste — CS:GO**
 
-# %%
-write_outputs({"regimes": regimes_gt, "walk_forward": folds_gt}, {}, args.tables)
+# %% jupyter={"source_hidden": true}
+tables["evaluation_split"]
+
+# %% jupyter={"source_hidden": true, "outputs_hidden": true}
+write_outputs(tables, {}, tables_path)

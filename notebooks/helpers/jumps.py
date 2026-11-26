@@ -1,16 +1,17 @@
 import polars as pl
+from helpers.parameters import parameters
 
-UP_JUMP = 1.0
+UP_JUMP = parameters().data_quality.up_jump
 
-DOWN_JUMP = -0.5
+DOWN_JUMP = parameters().data_quality.down_jump
 
-REVERSAL_RANGE = (0.75, 1.25)
+REVERSAL_RANGE = tuple(parameters().data_quality.reversal_range)
 
 DIRECTION_TYPE = pl.Enum(["up", "down"])
 
 
-def jump_rows(prices: pl.DataFrame) -> pl.DataFrame:
-    """Find the days where the price at least doubles or at least halves, and mark the jumps that revert.
+def find_jump_rows(prices: pl.DataFrame) -> pl.DataFrame:
+    """Find raw-return threshold crossings and mark the jumps that revert.
 
     A jump reverts when the next observed price is within `REVERSAL_RANGE` of the price before the jump.
 
@@ -30,7 +31,7 @@ def jump_rows(prices: pl.DataFrame) -> pl.DataFrame:
     return ordered.with_columns(is_reversed).filter(is_up | is_down).with_columns(direction)
 
 
-def jump_summary(prices: pl.DataFrame) -> pl.DataFrame:
+def summarize_jumps(prices: pl.DataFrame) -> pl.DataFrame:
     """Summarize the jumps of each direction: count, share that reverts, median size, and share in training.
 
     Returns:
@@ -40,7 +41,7 @@ def jump_summary(prices: pl.DataFrame) -> pl.DataFrame:
     size = pl.col("raw_return").abs()
 
     return (
-        jump_rows(prices)
+        find_jump_rows(prices)
         .group_by("direction")
         .agg(
             pl.len().alias("jumps"),
@@ -52,14 +53,14 @@ def jump_summary(prices: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-def jump_days(prices: pl.DataFrame, top: int) -> pl.DataFrame:
+def find_jump_days(prices: pl.DataFrame, top: int) -> pl.DataFrame:
     """Find the days with the most jumps and the share of the items that jumped.
 
     Returns:
         One row per day, from the day with the most jumps.
 
     """
-    jumps = jump_rows(prices).group_by("date").agg(pl.len().alias("jumps"))
+    jumps = find_jump_rows(prices).group_by("date").agg(pl.len().alias("jumps"))
     items = prices.drop_nulls("return").group_by("date").agg(pl.len().alias("items"))
     share = (pl.col("jumps") / pl.col("items")).alias("jump_share")
 

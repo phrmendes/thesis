@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 from great_tables import GT
-from helpers.formatting import write_latex_table
+from helpers.formatting import FONT_FAMILY, HELPER_PARAMETERS, write_latex_table
 from IPython import get_ipython
 
 if TYPE_CHECKING:
@@ -10,8 +10,8 @@ if TYPE_CHECKING:
     from altair import TopLevelMixin
 
 
-def inline_table_styles() -> None:
-    """Show each `GT` table in a notebook with its CSS inlined as `style` attributes.
+def enable_inline_table_styles() -> None:
+    """Show each `GT` table with centered titles, the thesis font, and inline CSS.
 
     The call does nothing outside IPython, so a notebook still runs as a plain script.
     """
@@ -20,10 +20,12 @@ def inline_table_styles() -> None:
     if shell is None:
         return
 
-    def inline_html(table: GT) -> str:
-        return table.as_raw_html(inline_css=True)
+    def render_inline_html(table: GT) -> str:
+        return table.tab_options(
+            table_font_names=[FONT_FAMILY, "serif"], heading_align=HELPER_PARAMETERS.heading_align
+        ).as_raw_html(inline_css=True)
 
-    shell.display_formatter.formatters["text/html"].for_type(GT, inline_html)
+    shell.display_formatter.formatters["text/html"].for_type(GT, render_inline_html)
 
 
 def write_outputs(
@@ -31,12 +33,10 @@ def write_outputs(
     charts: dict[str, TopLevelMixin],
     tables_directory: Path,
     images_directory: Path | None = None,
-    wide: frozenset[str] = frozenset(),
 ) -> None:
     """Write the tables and the PNG charts of one notebook and print one line for each file.
 
     Each table goes to `<tables>/<name>.tex`.
-    The tables named in `wide` shrink to the text width in LaTeX when they are wider.
 
     Raises:
         ValueError: A chart has no images directory.
@@ -46,7 +46,7 @@ def write_outputs(
 
     for name, table in tables.items():
         tex_path = tables_directory / f"{name}.tex"
-        write_latex_table(table, tex_path, wide=name in wide)
+        write_latex_table(table, tex_path)
         print(f"Written {tex_path}")
 
     for name, chart in charts.items():
@@ -56,5 +56,5 @@ def write_outputs(
 
         images_directory.mkdir(parents=True, exist_ok=True)
         path = images_directory / f"{name}.png"
-        chart.save(path, scale_factor=2.0)
+        chart.save(path, scale_factor=HELPER_PARAMETERS.png_scale)
         print(f"Written {path}")

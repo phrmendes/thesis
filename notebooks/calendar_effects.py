@@ -1,313 +1,524 @@
 # %% [markdown]
-# # Efeitos de calendário nos retornos dos itens CS:GO
+# # Retornos nas promoções e nos dias da semana — CS:GO
 #
-# Glaus (2022) mostra que os retornos de itens da Steam mudam em torno das promoções sazonais da loja. Este
-# caderno testa esse efeito nos dados. A ordem vai do geral ao específico: as temporadas de promoção, a
-# regressão por fase, o retorno em cada promoção, a atividade de negociação, a divisão por raridade e o
-# efeito do dia da semana. Todas as estimativas descrevem associações. Com dez promoções, nenhuma isola uma
-# causa.
+# Glaus (2022) identifica diferenças nos retornos em torno das promoções sazonais da Steam. Este notebook
+# examina esse padrão nas fases da promoção, nas raridades e nos dias da semana.
+#
+# A amostra contém dez promoções. As estimativas descrevem relações entre calendário e retornos, sem
+# identificar efeitos causais.
 
-# %%
-from argparse import ArgumentParser
-from pathlib import Path
-
+# %% jupyter={"source_hidden": true}
 import polars as pl
-from great_tables import GT
-from helpers.export import inline_table_styles, write_outputs
-from helpers.formatting import DEC_MARK, SEP_MARK, format_metric
-from helpers.market import market_series
-from helpers.paths import repo
-from helpers.runtime import notebook_arguments
+from great_tables import GT, md
+from great_tables.vals import fmt_number
+from helpers.diagnostics import tabulate_joint_tests
+from helpers.export import enable_inline_table_styles, write_outputs
+from helpers.formatting import LOCALE, TABLE_SOURCE
+from helpers.market import get_market_series
+from helpers.parameters import parameters
+from helpers.paths import get_repo_root
 from helpers.sales import (
-    activity_regression,
-    sale_event_summary,
-    sale_regression,
-    sale_season_summary,
-    segment_phase_effects,
-    weekday_effects,
-    weekday_joint_test,
+    add_sale_calendar,
+    estimate_segment_phase_effects,
+    estimate_weekday_effects,
+    fit_phase_model,
+    fit_sale_regression,
+    fit_segment_models,
+    run_weekday_test,
+    summarize_phase_lag_sensitivity,
+    summarize_sale_phases,
+    summarize_weekday_lag_sensitivity,
 )
 from helpers.schemas import read_table
-from helpers.segments import rarity_segment
+from helpers.segments import build_rarity_segment
 
-# %%
-# GitHub drops style blocks, so the tables keep their styles inline.
-inline_table_styles()
+enable_inline_table_styles()
 
-WIDE_TABLES = frozenset({"sale_phases", "sale_rarity"})
+notebook_parameters = parameters().calendar_effects
 
-MIN_SEGMENT_ITEMS = 100
+paths = parameters().paths
 
-SEASON_LABELS = {
-    "none": "Fora de promoção",
-    "autumn": "Promoção de outono",
-    "winter": "Promoção de inverno",
-    "summer": "Promoção de verão",
-    "spring": "Promoção de primavera",
-}
+prices_path = get_repo_root() / paths.prices
+
+tables_path = get_repo_root() / paths.tables
+
+tables: dict[str, GT] = {}
+
+MIN_SEGMENT_ITEMS = notebook_parameters.min_segment_items
+
+EQUAL_LABEL = "Ponderação igual"
+
+WEIGHTED_LABEL = "Ponderado por preço"
 
 PHASE_LABELS = {
-    "const": "Dias fora de promoção",
-    "pre": "Pré-venda",
+    "const": "Dias fora de promoção (1)",
+    "pre": "Pré-promoção (2)",
     "fh": "Promoção, primeira metade",
     "sh": "Promoção, segunda metade",
-    "post": "Pós-venda",
+    "post": "Pós-promoção (3)",
     "turn_of_year": "Virada do ano",
 }
 
-WEEKDAY_LABELS = {1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado", 7: "Domingo"}
-
-# %% [markdown]
-# ## Argumentos da linha de comando
-
-# %%
-parser = ArgumentParser(description="Calendário: promoções da Steam e dia da semana.")
-parser.add_argument("--prices", type=Path, default=repo() / "files/prices.parquet", help="Preços diários limpos.")
-parser.add_argument("--tables", type=Path, default=repo() / "output/tables", help="Pasta para os arquivos das tabelas.")
-args = parser.parse_args(notebook_arguments())
-
-# %%
-prices = read_table("prices", args.prices)
-market = market_series(prices)
-
-# %% [markdown]
-# ## Comparar os retornos por temporada de promoção
-#
-# Glaus (2022) encontra retornos menores no início e maiores depois das promoções sazonais da Steam. Esta
-# tabela compara os retornos diários dos itens por temporada de promoção. A comparação é descritiva: as
-# observações item-dia são dependentes, então a tabela não testa um efeito causal.
-
-# %%
-seasons = sale_season_summary(prices)
-seasons_text = seasons.with_columns(pl.col("sale_season").replace_strict(SEASON_LABELS, return_dtype=pl.String))
-
-seasons_gt = (
-    GT(seasons_text)
-    .cols_align("left", columns="sale_season")
-    .tab_header(title="Retornos Diários por Temporada de Promoção — CS:GO")
-    .fmt_integer(columns=["item_days"], sep_mark=SEP_MARK)
-    .fmt_percent(
-        columns=["mean_return", "median_return", "std_return"], decimals=2, sep_mark=SEP_MARK, dec_mark=DEC_MARK
-    )
-    .fmt_percent(columns=["positive_share"], decimals=1, sep_mark=SEP_MARK, dec_mark=DEC_MARK)
-    .cols_label(
-        sale_season="Temporada",
-        item_days="Itens-dia",
-        mean_return="Média",
-        median_return="Mediana",
-        std_return="DP",
-        positive_share="Dias positivos",
-    )
-    .tab_source_note(
-        "DP: desvio padrão. Um dia pertence a uma temporada quando cai dentro do período da promoção da Steam. "
-        "Comparação descritiva: as observações item-dia são dependentes, então a tabela não testa "
-        "um efeito causal de promoção."
-    )
-)
-seasons_gt
-
-# %% [markdown]
-# ## Estimar o efeito de cada fase da promoção
-#
-# A regressão segue Glaus (2022): retorno diário do mercado, como o retorno de portfólio dele, e erros de
-# Newey-West. A pré-venda tem metade da duração da promoção, a pós-venda tem a duração inteira, e a
-# promoção se divide em primeira e segunda metade. A virada do ano entra como controle, porque a promoção
-# de inverno cobre o fim do ano.
-
-# %%
-phases = sale_regression(market)
-phases_text = phases.with_columns(pl.col("term").replace_strict(PHASE_LABELS, return_dtype=pl.String))
-
-phases_gt = (
-    GT(phases_text)
-    .cols_align("left", columns="term")
-    .tab_header(title="Retorno Diário do Mercado por Fase da Promoção — CS:GO")
-    .fmt_integer(columns=["days"], sep_mark=SEP_MARK)
-    .fmt_percent(
-        columns=["equal_coefficient", "weighted_coefficient"], decimals=2, sep_mark=SEP_MARK, dec_mark=DEC_MARK
-    )
-    .fmt_number(columns=["equal_statistic", "weighted_statistic"], decimals=2, sep_mark=SEP_MARK, dec_mark=DEC_MARK)
-    .fmt_number(columns=["equal_p_value", "weighted_p_value"], decimals=3, sep_mark=SEP_MARK, dec_mark=DEC_MARK)
-    .tab_spanner(label="Peso igual", columns=["equal_coefficient", "equal_statistic", "equal_p_value"])
-    .tab_spanner(label="Peso por preço", columns=["weighted_coefficient", "weighted_statistic", "weighted_p_value"])
-    .cols_label(
-        term="Fase",
-        days="Dias",
-        equal_coefficient="Coef.",
-        equal_statistic="t",
-        equal_p_value="p",
-        weighted_coefficient="Coef.",
-        weighted_statistic="t",
-        weighted_p_value="p",
-    )
-    .tab_source_note(
-        "Regressão do retorno diário do mercado sobre variáveis binárias de fase e da virada do ano, com erros de "
-        "Newey-West (7 defasagens). A constante é a média dos dias fora de promoção. "
-        "Pré-venda: metade da duração da promoção antes. Pós-venda: a duração da promoção depois. "
-        "O peso por preço usa o preço do dia anterior com preço. Estimativas descritivas: a virada do ano está "
-        "dentro da promoção de inverno e a amostra tem dez promoções."
-    )
-)
-phases_gt
-
-# %% [markdown]
-# ## Conferir cada promoção
-#
-# Glaus (2022) testa se uma única promoção explica o resultado. A tabela por evento mostra o retorno
-# diário médio do mercado em cada fase de cada promoção.
-
-# %%
-events = sale_event_summary(market)
-events_text = events.with_columns(
-    pl.col("event_year").cast(pl.String),
-    pl.col("event_season").replace_strict(SEASON_LABELS, return_dtype=pl.String),
-    pl.col("first_sale_day").dt.strftime("%d/%m/%Y"),
-)
-
-events_gt = (
-    GT(events_text)
-    .cols_align("left", columns=["event_year", "event_season"])
-    .tab_header(title="Retorno Diário do Mercado em Torno de Cada Promoção — CS:GO")
-    .fmt_percent(
-        columns=["pre_return", "fh_return", "sh_return", "post_return"],
-        decimals=2,
-        sep_mark=SEP_MARK,
-        dec_mark=DEC_MARK,
-    )
-    .sub_missing(missing_text="n/d")
-    .cols_label(
-        event_year="Ano",
-        event_season="Promoção",
-        first_sale_day="Primeiro dia",
-        sale_days="Dias",
-        pre_return="Pré-venda",
-        fh_return="1ª metade",
-        sh_return="2ª metade",
-        post_return="Pós-venda",
-    )
-    .tab_source_note(
-        "Média do retorno diário do mercado (peso igual) em cada fase. "
-        "n/d: o dia pertence à fase de outra promoção ou fica fora da amostra."
-    )
-)
-events_gt
-
-# %% [markdown]
-# ## Medir a atividade de negociação nas promoções
-#
-# Glaus (2022) liga o efeito de promoção a um volume maior nos dias de promoção. A fonte não traz volume.
-# O substituto é a parcela dos itens listados que tem preço de 24 horas no dia, ou seja, que teve ao menos
-# uma venda. A regressão usa as mesmas fases. A parcela mede se o item negocia, não quanto. A qualidade da
-# captura do dia também a move, então o resultado é só um indício.
-
-# %%
-activity = activity_regression(prices)
-activity_text = activity.with_columns(pl.col("term").replace_strict(PHASE_LABELS, return_dtype=pl.String))
-
-activity_gt = (
-    GT(activity_text)
-    .cols_align("left", columns="term")
-    .tab_header(title="Atividade de Negociação por Fase da Promoção — CS:GO")
-    .fmt_integer(columns=["days"], sep_mark=SEP_MARK)
-    .fmt_percent(columns=["activity_coefficient"], decimals=2, sep_mark=SEP_MARK, dec_mark=DEC_MARK)
-    .fmt_number(columns=["activity_statistic"], decimals=2, sep_mark=SEP_MARK, dec_mark=DEC_MARK)
-    .fmt_number(columns=["activity_p_value"], decimals=3, sep_mark=SEP_MARK, dec_mark=DEC_MARK)
-    .cols_label(
-        term="Fase",
-        days="Dias",
-        activity_coefficient="Coef. (pontos percentuais)",
-        activity_statistic="t",
-        activity_p_value="p",
-    )
-    .tab_source_note(
-        "Variável: itens com preço de 24 horas no dia sobre itens listados até o dia. Newey-West (7 defasagens). "
-        "A constante é a parcela média dos dias fora de promoção. Substituto do volume de Glaus (2022)."
-    )
-)
-activity_gt
-
-# %% [markdown]
-# ## Separar o efeito por raridade
-#
-# Glaus (2022) testa se o efeito vem de itens com características específicas. A tabela repete a regressão
-# do mercado dentro de cada raridade com ao menos 100 itens e mostra a primeira metade da promoção e o
-# pós-venda.
-
-# %%
-by_rarity = segment_phase_effects(prices, rarity_segment(), MIN_SEGMENT_ITEMS)
-
-rarity_gt = (
-    GT(by_rarity)
-    .cols_align("left", columns="segment")
-    .tab_header(title="Efeito da Promoção por Raridade — CS:GO")
-    .fmt_integer(columns=["items"], sep_mark=SEP_MARK)
-    .fmt_percent(columns=["fh_coefficient", "post_coefficient"], decimals=2, sep_mark=SEP_MARK, dec_mark=DEC_MARK)
-    .fmt_number(columns=["fh_statistic", "post_statistic"], decimals=2, sep_mark=SEP_MARK, dec_mark=DEC_MARK)
-    .tab_spanner(label="Promoção, primeira metade", columns=["fh_coefficient", "fh_statistic"])
-    .tab_spanner(label="Pós-venda", columns=["post_coefficient", "post_statistic"])
-    .cols_label(
-        segment="Raridade",
-        items="Itens",
-        fh_coefficient="Coef.",
-        fh_statistic="t",
-        post_coefficient="Coef.",
-        post_statistic="t",
-    )
-    .tab_source_note(
-        f"Raridades com {MIN_SEGMENT_ITEMS} itens ou mais, em ordem de tamanho. Mercado de peso igual dentro da "
-        "raridade, com a mesma regressão da tabela de fases e erros de Newey-West."
-    )
-)
-rarity_gt
-
-# %% [markdown]
-# ## Verificar o efeito do dia da semana
-#
-# O dia da semana é outra anomalia de calendário de dados diários. A regressão estima o retorno médio do
-# mercado em cada dia da semana, sem constante, e o teste conjunto verifica se as sete médias são iguais.
-# Se o padrão semanal for fraco, as fases de promoção não refletem o dia da semana em que caem.
-
-# %%
-weekdays = weekday_effects(market)
-joint = weekday_joint_test(market).row(0, named=True)
-weekdays_text = weekdays.with_columns(pl.col("weekday").replace_strict(WEEKDAY_LABELS, return_dtype=pl.String))
-
-weekday_gt = (
-    GT(weekdays_text)
-    .cols_align("left", columns="weekday")
-    .tab_header(title="Retorno Diário do Mercado por Dia da Semana — CS:GO")
-    .fmt_percent(
-        columns=["equal_coefficient", "weighted_coefficient"], decimals=2, sep_mark=SEP_MARK, dec_mark=DEC_MARK
-    )
-    .fmt_number(columns=["equal_statistic", "weighted_statistic"], decimals=2, sep_mark=SEP_MARK, dec_mark=DEC_MARK)
-    .tab_spanner(label="Peso igual", columns=["equal_coefficient", "equal_statistic"])
-    .tab_spanner(label="Peso por preço", columns=["weighted_coefficient", "weighted_statistic"])
-    .cols_label(
-        weekday="Dia",
-        equal_coefficient="Média",
-        equal_statistic="t",
-        weighted_coefficient="Média",
-        weighted_statistic="t",
-    )
-    .tab_source_note(
-        "Média do retorno do mercado em cada dia, com erros de Newey-West (7 defasagens). "
-        f"Teste conjunto de médias iguais: p = {format_metric(joint['equal_p_value'], '.3f')} (peso igual) e "
-        f"p = {format_metric(joint['weighted_p_value'], '.3f')} (peso por preço)."
-    )
-)
-weekday_gt
-
-# %% [markdown]
-# ## Exportar tabelas LaTeX
-
-# %%
-tables = {
-    "sale_seasons": seasons_gt,
-    "sale_phases": phases_gt,
-    "sale_events": events_gt,
-    "sale_activity": activity_gt,
-    "sale_rarity": rarity_gt,
-    "weekday": weekday_gt,
+ITEM_PHASE_LABELS = {
+    "none": "Dias fora de promoção",
+    "pre": "Pré-promoção (1)",
+    "fh": PHASE_LABELS["fh"],
+    "sh": PHASE_LABELS["sh"],
+    "post": "Pós-promoção (2)",
 }
 
-write_outputs(tables, {}, args.tables, wide=WIDE_TABLES)
+WEEKDAY_LABELS = {
+    1: "Segunda",
+    2: "Terça",
+    3: "Quarta",
+    4: "Quinta",
+    5: "Sexta",
+    6: "Sábado",
+    7: "Domingo",
+}
+
+
+def build_plain_test_table(frame: pl.DataFrame, model_label: str) -> GT:
+    """Build the table of a test that has one statistic and one p-value for each model.
+
+    Returns:
+        The formatted table.
+
+    """
+    return (
+        GT(frame, locale=LOCALE)
+        .tab_source_note(TABLE_SOURCE)
+        .cols_align("left", columns="model")
+        .fmt_number(columns=["statistic"], decimals=2)
+        .fmt_number(columns=["p_value"], decimals=3)
+        .cols_label(model=md(f"**{model_label}**"), statistic=md("**Estatística**"), p_value=md("**p**"))
+    )
+
+
+prices = read_table("prices", prices_path)
+
+# %% [markdown]
+# ## Retornos e índice de mercado
+#
+# ### Retorno médio
+#
+# $$
+# R_t = \frac{1}{n_t} \sum_{i=1}^{n_t} r_{i,t}.
+# $$
+#
+# $t$ representa o dia, e $i$ representa o item. O retorno do item $i$ no dia $t$ é $r_{i,t}$.
+# O número de itens com retorno observado nesse dia é $n_t$.
+#
+# ### Retorno ponderado pelo preço
+#
+# O retorno ponderado usa como ponderador o preço do item no dia observado anterior, $t^-$, ou seja, $p_{i,t^-}$:
+#
+# $$
+# R_t^{\mathrm{pond}} = \frac{\sum_{i=1}^{n_t} p_{i,t^-} r_{i,t}}{\sum_{i=1}^{n_t} p_{i,t^-}}.
+# $$
+#
+# ### Índice de mercado
+#
+# O índice acumula a média geométrica diária, $G_t$, dos retornos brutos, $1 + r_{i,t}$. Essa escolha reduz o
+# efeito do ruído dos preços. O código usa a segunda forma, que evita o produto de milhares de números:
+#
+# $$
+# G_t = \left(\prod_{i=1}^{n_t} (1 + r_{i,t})\right)^{1/n_t}
+# = \exp\!\left(\frac{1}{n_t} \sum_{i=1}^{n_t} \ln(1 + r_{i,t})\right),
+# \qquad 1 + r_{i,t} > 0.
+# $$
+#
+# A igualdade exige retornos brutos positivos. Isso vale aqui, porque os preços são positivos.
+#
+# O índice começa em 1 e muda a cada dia pela média geométrica do dia:
+#
+# $$
+# I_0 = 1, \qquad I_t = I_{t-1} G_t.
+# $$
+
+# %%
+market = get_market_series(prices)
+
+market
+
+# %% [markdown]
+# ## Retornos por fase da promoção
+#
+# A tabela resume os retornos diários dos itens em cada fase da promoção. A definição das fases é a mesma da
+# regressão seguinte.
+#
+# O período de referência exclui a pré-promoção, a promoção e a pós-promoção. As observações de um mesmo dia e
+# de um mesmo item não são independentes.
+
+# %%
+item_phases = summarize_sale_phases(prices).with_columns(
+    pl.col("phase")
+    .cast(pl.String)
+    .replace_strict(
+        ITEM_PHASE_LABELS,
+        return_dtype=pl.String,
+    )
+)
+
+tables["item_phases"] = (
+    GT(item_phases, locale=LOCALE)
+    .tab_options(table_font_size="9.5pt")
+    .tab_source_note(TABLE_SOURCE)
+    .tab_source_note(
+        "DP: desvio padrão. "
+        "N. de observações conta os retornos válidos dos itens em cada data. "
+        "O mesmo item pode aparecer em várias datas."
+    )
+    .cols_align("left", columns="phase")
+    .fmt_integer(columns=["item_days"])
+    .fmt_percent(columns=["mean_return", "median_return", "std_return"], decimals=2)
+    .fmt_percent(columns=["positive_share"], decimals=1)
+    .cols_label(
+        phase=md("**Fase**"),
+        item_days=md("**N. de observações**"),
+        mean_return=md("**Média**"),
+        median_return=md("**Mediana**"),
+        std_return=md("**DP**"),
+        positive_share=md("**Retornos positivos**"),
+    )
+    .tab_source_note("(1) A pré-promoção dura metade da promoção.")
+    .tab_source_note("(2) A pós-promoção dura a promoção inteira.")
+)
+
+# %% [markdown]
+# **Retornos diários dos itens por fase da promoção — CS:GO**
+
+# %% jupyter={"source_hidden": true}
+tables["item_phases"]
+
+# %% [markdown]
+# ## Diferenças de retorno por fase da promoção
+#
+# O modelo segue Glaus (2022) e usa o retorno diário do mercado como variável dependente. A pré-promoção
+# abrange metade da duração da promoção, e a pós-promoção abrange a duração inteira. O período da promoção se divide
+# em duas metades. A primeira inclui o dia excedente quando a duração é ímpar. O modelo controla a virada
+# do ano, que coincide parcialmente com as promoções de inverno.
+#
+# A notação segue Wooldridge (equação 12.40):
+#
+# $$
+# y_t = \beta_0 + \beta_1 x_{t1} + \cdots + \beta_5 x_{t5} + u_t.
+# $$
+#
+# $y_t$ é o retorno diário do mercado, com ponderação igual ou por preço. As variáveis $x_{t1}, \ldots, x_{t5}$
+# indicam, nessa ordem, a pré-promoção, a primeira metade, a segunda metade, a pós-promoção e a virada do ano.
+# Cada variável vale 1 no período correspondente e 0 nos demais dias. $\beta_0$ é a constante, $\beta_j$ é o
+# coeficiente da variável $j$ e $u_t$ é o erro não observado.
+#
+# A análise estima as regressões por mínimos quadrados ordinários, com erros-padrão HAC de Newey-West.
+# Essa correção permite inferência robusta à heterocedasticidade e à correlação serial,
+# sob as condições de validade do método.
+# A análise usa HAC diretamente, sem testes preliminares para escolher a correção.
+
+# %%
+phases = fit_sale_regression(market).with_columns(pl.col("term").replace_strict(PHASE_LABELS, return_dtype=pl.String))
+
+tables["sale_phases"] = (
+    GT(phases, locale=LOCALE)
+    .tab_source_note(TABLE_SOURCE)
+    .tab_source_note(
+        "Regressão do retorno diário de mercado nas variáveis de fase e de virada do ano. "
+        "Erros-padrão de Newey-West, com defasagens pela regra apresentada por Wooldridge."
+    )
+    .tab_options(table_font_size="11pt")
+    .cols_align("left", columns="term")
+    .fmt_integer(columns=["days"])
+    .fmt_percent(
+        columns=["equal_coefficient", "weighted_coefficient"],
+        decimals=2,
+    )
+    .fmt_number(columns=["equal_statistic", "weighted_statistic"], decimals=2)
+    .fmt_number(columns=["equal_p_value", "weighted_p_value"], decimals=3)
+    .tab_spanner(label=md("**Ponderação igual**"), columns=["equal_coefficient", "equal_statistic", "equal_p_value"])
+    .tab_spanner(
+        label=md("**Ponderado por preço** (4)"),
+        columns=["weighted_coefficient", "weighted_statistic", "weighted_p_value"],
+    )
+    .cols_label(
+        term=md("**Fase**"),
+        days=md("**Dias**"),
+        equal_coefficient=md("**Coef.**"),
+        equal_statistic=md("**t**"),
+        equal_p_value=md("**p**"),
+        weighted_coefficient=md("**Coef.**"),
+        weighted_statistic=md("**t**"),
+        weighted_p_value=md("**p**"),
+    )
+    .tab_source_note("(1) A constante é a média dos dias fora de promoção.")
+    .tab_source_note("(2) Período anterior à promoção, com metade de sua duração.")
+    .tab_source_note("(3) Período posterior à promoção, com duração igual à da promoção.")
+    .tab_source_note("(4) A ponderação usa o preço da observação anterior.")
+)
+
+# %% [markdown]
+# **Retorno diário do mercado por fase da promoção — CS:GO**
+
+# %% jupyter={"source_hidden": true}
+tables["sale_phases"]
+
+# %% [markdown]
+# ### Diferença das fases em relação ao período de referência
+#
+# Os testes individuais avaliam um coeficiente por vez. O teste de Wald avalia os quatro coeficientes de fase
+# em conjunto:
+#
+# $$
+# H_0: \beta_1 = \beta_2 = \beta_3 = \beta_4 = 0.
+# $$
+#
+# O teste de Wald avalia os quatro coeficientes em conjunto, com covariância de Newey-West.
+# A constante $\beta_0$ e o coeficiente da virada do ano $\beta_5$ ficam fora do teste.
+# Sob a hipótese nula, a estatística segue aproximadamente uma $\chi^2$ com quatro graus de liberdade.
+
+# %%
+phase_data = add_sale_calendar(market)
+
+phase_models = {
+    EQUAL_LABEL: fit_phase_model(phase_data, "return"),
+    WEIGHTED_LABEL: fit_phase_model(phase_data, "weighted_return"),
+}
+
+tables["phases_joint"] = build_plain_test_table(
+    tabulate_joint_tests(phase_models),
+    "Retorno do mercado",
+)
+
+# %% [markdown]
+# **Teste conjunto das fases da promoção**
+
+# %% jupyter={"source_hidden": true}
+tables["phases_joint"]
+
+# %% [markdown]
+# O teste rejeita a hipótese de que os quatro coeficientes de fase são zero nas duas ponderações.
+# Os p-valores são 0,003 com ponderação igual e 0,006 com ponderação por preço. Pelo menos uma fase apresenta
+# retorno médio diferente do período de referência, após controlar a virada do ano.
+
+# %% [markdown]
+# ### Sensibilidade das conclusões sobre as fases às defasagens
+#
+# O número de defasagens de Newey-West muda os erros padrão. A análise aplica a regra de
+# Newey-West apresentada por Wooldridge (§12.5): $\lfloor 4 (n/100)^{2/9} \rfloor$, onde $n$ conta as observações
+# da regressão após excluir valores ausentes. Com 983 observações, a regra dá 6 defasagens.
+# Uma lacuna pode separar duas observações consecutivas. A tabela compara 5, 6, 7 e 14 defasagens e mostra o
+# p-valor de duas fases. Ela verifica se a escolha das defasagens altera a conclusão.
+
+# %%
+phase_lags = summarize_phase_lag_sensitivity(phase_data, {"equal": "return", "weighted": "weighted_return"})
+
+tables["phases_lags"] = (
+    GT(phase_lags, locale=LOCALE)
+    .tab_source_note(TABLE_SOURCE)
+    .tab_source_note("P-valores dos coeficientes. Os coeficientes são os mesmos em todas as linhas.")
+    .fmt_integer(columns=["lags"])
+    .fmt_number(
+        columns=[column for column in phase_lags.columns if column.endswith("p_value")],
+        decimals=3,
+    )
+    .tab_spanner(label=md(f"**{EQUAL_LABEL}**"), columns=["equal_fh_p_value", "equal_post_p_value"])
+    .tab_spanner(label=md(f"**{WEIGHTED_LABEL}**"), columns=["weighted_fh_p_value", "weighted_post_p_value"])
+    .cols_label(
+        lags=md("**Defasagens**"),
+        equal_fh_p_value=md("**1ª metade**"),
+        equal_post_p_value=md("**Pós-promoção**"),
+        weighted_fh_p_value=md("**1ª metade**"),
+        weighted_post_p_value=md("**Pós-promoção**"),
+    )
+)
+
+# %% [markdown]
+# **Sensibilidade às defasagens de Newey-West — fases da promoção**
+
+# %% jupyter={"source_hidden": true}
+tables["phases_lags"]
+
+# %% [markdown]
+# A primeira metade permanece significativa a 5% nas duas ponderações, em todas as defasagens testadas.
+# A pós-promoção permanece significativa apenas com ponderação igual. Nesse caso, o p-valor chega a 0,049
+# com 14 defasagens, próximo do limite de 5%.
+
+# %% [markdown]
+# ## Retornos por fase dentro de cada raridade
+#
+# A análise estima uma regressão para cada raridade que atinge o mínimo de itens definido nos parâmetros.
+# A tabela apresenta os coeficientes da primeira metade e da pós-promoção.
+#
+# Em cada regressão, $y_t$ representa o retorno médio diário dos itens daquela raridade. Os demais termos
+# seguem a mesma definição da regressão de mercado.
+
+# %%
+by_rarity = estimate_segment_phase_effects(prices, build_rarity_segment(), MIN_SEGMENT_ITEMS)
+
+tables["sale_rarity"] = (
+    GT(by_rarity, locale=LOCALE)
+    .tab_source_note(TABLE_SOURCE)
+    .tab_source_note(
+        f"Raridades com pelo menos {MIN_SEGMENT_ITEMS} itens, em ordem decrescente do número de itens. "
+        "Retorno com ponderação igual dentro de cada raridade e erros-padrão de Newey-West."
+    )
+    .cols_align("left", columns="segment")
+    .fmt_integer(columns=["items"])
+    .fmt_percent(columns=["fh_coefficient", "post_coefficient"], decimals=2)
+    .fmt_number(columns=["fh_statistic", "post_statistic"], decimals=2)
+    .fmt_number(columns=["fh_p_value", "post_p_value"], decimals=3)
+    .tab_spanner(label=md("**Promoção, primeira metade**"), columns=["fh_coefficient", "fh_statistic", "fh_p_value"])
+    .tab_spanner(label=md("**Pós-promoção**"), columns=["post_coefficient", "post_statistic", "post_p_value"])
+    .cols_label(
+        segment=md("**Raridade**"),
+        items=md("**Itens**"),
+        fh_coefficient=md("**Coef.**"),
+        fh_statistic=md("**t**"),
+        fh_p_value=md("**p**"),
+        post_coefficient=md("**Coef.**"),
+        post_statistic=md("**t**"),
+        post_p_value=md("**p**"),
+    )
+)
+
+# %% [markdown]
+# **Efeito da promoção por raridade — CS:GO**
+
+# %% jupyter={"source_hidden": true}
+tables["sale_rarity"]
+
+# %% [markdown]
+# A primeira metade apresenta coeficientes negativos em todas as raridades. Na pós-promoção, os coeficientes
+# são positivos, exceto em Consumer Grade, cuja estimativa fica próxima de zero. As regressões separadas não
+# testam se os coeficientes diferem entre raridades.
+
+# %% [markdown]
+# ### Teste conjunto das fases dentro de cada raridade
+#
+# A análise estima uma regressão para cada raridade. O teste de Wald avalia os quatro coeficientes de fase
+# em conjunto, com covariância HAC. O teste verifica se pelo menos uma fase tem retorno médio diferente dos
+# dias fora de promoção. A regressão inclui o controle da virada do ano. Cada linha representa uma raridade,
+# sem comparação entre raridades.
+
+# %%
+rarity_models = fit_segment_models(prices, build_rarity_segment(), MIN_SEGMENT_ITEMS)
+
+tables["rarity_joint"] = build_plain_test_table(
+    tabulate_joint_tests(rarity_models),
+    "Raridade",
+)
+
+# %% [markdown]
+# **Teste de Wald das fases em cada raridade**
+
+# %% jupyter={"source_hidden": true}
+tables["rarity_joint"]
+
+# %% [markdown]
+# O teste detecta diferenças a 5% em seis raridades: Restricted, Classified, Mil-Spec Grade, High Grade,
+# Exotic e Base Grade. Nesses casos, pelo menos uma fase tem retorno médio diferente do período de referência.
+# Nas outras cinco raridades, a evidência não basta para detectar essa diferença.
+# Em High Grade, o p-valor de 0,048 fica próximo do limite de 5%.
+
+# %% [markdown]
+# ## Retornos médios por dia da semana
+#
+# A regressão estima o retorno médio do mercado em cada dia da semana, sem constante. O objetivo é
+# verificar se os retornos médios diferem entre os dias:
+#
+# $$
+# y_t = \beta_1 x_{t1} + \cdots + \beta_7 x_{t7} + u_t.
+# $$
+#
+# Neste modelo, $y_t$ é o retorno diário do mercado. As variáveis $x_{t1}, \ldots, x_{t7}$ indicam os dias de
+# segunda a domingo. Cada variável vale 1 no dia correspondente e 0 nos demais dias. O coeficiente $\beta_j$
+# é a média do retorno no dia $j$ e $u_t$ é o erro. O teste conjunto verifica se as sete médias são iguais:
+#
+# $$
+# H_0: \beta_1 = \beta_2 = \cdots = \beta_7.
+# $$
+
+# %%
+joint = run_weekday_test(market).row(0, named=True)
+
+weekdays = estimate_weekday_effects(market).with_columns(
+    pl.col("weekday").replace_strict(
+        WEEKDAY_LABELS,
+        return_dtype=pl.String,
+    )
+)
+
+equal_p_value_label = pl.select(fmt_number(pl.lit(joint["equal_p_value"]), decimals=3, locale=LOCALE)).item()
+
+weighted_p_value_label = pl.select(fmt_number(pl.lit(joint["weighted_p_value"]), decimals=3, locale=LOCALE)).item()
+
+tables["weekday"] = (
+    GT(weekdays, locale=LOCALE)
+    .tab_source_note(TABLE_SOURCE)
+    .tab_source_note(
+        "Média do retorno de mercado em cada dia da semana, com erros-padrão de Newey-West. "
+        "As defasagens seguem a regra apresentada por Wooldridge. "
+        f"Teste conjunto de médias iguais: p = {equal_p_value_label} (ponderação igual) e "
+        f"p = {weighted_p_value_label} (ponderado por preço)."
+    )
+    .cols_align("left", columns="weekday")
+    .fmt_percent(columns=["equal_coefficient", "weighted_coefficient"], decimals=2)
+    .fmt_number(columns=["equal_statistic", "weighted_statistic"], decimals=2)
+    .fmt_number(columns=["equal_p_value", "weighted_p_value"], decimals=3)
+    .tab_spanner(label=md("**Ponderação igual**"), columns=["equal_coefficient", "equal_statistic", "equal_p_value"])
+    .tab_spanner(
+        label=md("**Ponderado por preço**"), columns=["weighted_coefficient", "weighted_statistic", "weighted_p_value"]
+    )
+    .cols_label(
+        weekday=md("**Dia**"),
+        equal_coefficient=md("**Média**"),
+        equal_statistic=md("**t**"),
+        equal_p_value=md("**p** (1)"),
+        weighted_coefficient=md("**Média**"),
+        weighted_statistic=md("**t**"),
+        weighted_p_value=md("**p** (1)"),
+    )
+    .tab_source_note("(1) O p-valor testa se a média do dia é zero.")
+)
+
+# %% [markdown]
+# **Retorno diário do mercado por dia da semana — CS:GO**
+
+# %% jupyter={"source_hidden": true}
+tables["weekday"]
+
+# %% [markdown]
+# Com ponderação igual, o teste conjunto rejeita médias iguais entre os dias da semana (p = 0,026).
+# Com ponderação por preço, não rejeita (p = 0,147). A evidência de diferenças entre dias depende da ponderação.
+
+# %% [markdown]
+# ### Sensibilidade da conclusão sobre os dias da semana às defasagens
+#
+# O teste conjunto das sete médias depende do número de defasagens de Newey-West. A tabela refaz o teste
+# com 5, 6, 7 e 14 defasagens.
+
+# %%
+weekday_lags = summarize_weekday_lag_sensitivity(market)
+
+tables["weekday_lags"] = (
+    GT(weekday_lags, locale=LOCALE)
+    .tab_source_note(TABLE_SOURCE)
+    .tab_source_note("P-valor do teste conjunto de médias iguais.")
+    .fmt_integer(columns=["lags"])
+    .fmt_number(columns=["equal_p_value", "weighted_p_value"], decimals=3)
+    .cols_label(
+        lags=md("**Defasagens**"), equal_p_value=md(f"**{EQUAL_LABEL}**"), weighted_p_value=md(f"**{WEIGHTED_LABEL}**")
+    )
+)
+
+# %% [markdown]
+# **Sensibilidade às defasagens de Newey-West — dia da semana**
+
+# %% jupyter={"source_hidden": true}
+tables["weekday_lags"]
+
+# %% [markdown]
+# A conclusão se mantém em todas as defasagens testadas: o teste rejeita médias iguais apenas com ponderação igual.
+# Os p-valores variam de 0,022 a 0,040 nessa ponderação e de 0,147 a 0,176 na ponderação por preço.
+
+# %% jupyter={"source_hidden": true, "outputs_hidden": true}
+write_outputs(tables, {}, tables_path)

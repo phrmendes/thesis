@@ -1,245 +1,169 @@
 # %% [markdown]
-# # Dinâmica do mercado de itens CS:GO
+# # Evolução do mercado e dependência dos retornos — CS:GO
 #
-# Este caderno trata o mercado como uma série. A ordem vai do nível ao comportamento: o índice e a
-# volatilidade, a dinâmica (autocorrelação, correlação com o mercado, raiz unitária e agrupamento de
-# volatilidade), o ruído de preço que explica parte da autocorrelação e a estacionariedade de cada item. O
-# mercado é a média simples dos retornos diários dos itens.
+# O notebook descreve o mercado com base no painel de preços dos itens. A análise mostra o índice de mercado,
+# a volatilidade e a dependência dos retornos dentro dos itens e em relação ao mercado.
 
-# %%
-from argparse import ArgumentParser
-from pathlib import Path
-
+# %% jupyter={"source_hidden": true}
 import altair as alt
 import polars as pl
-from great_tables import GT
-from helpers.export import inline_table_styles, write_outputs
-from helpers.formatting import format_metric, metric_text_table
-from helpers.market import LAGS, market_dynamics, market_series, market_with_volatility
-from helpers.noise import price_noise
-from helpers.params import load_params
-from helpers.paths import repo
-from helpers.runtime import notebook_arguments
+from great_tables import GT, md
+from great_tables.vals import fmt_number, fmt_percent
+from helpers.export import enable_inline_table_styles, write_outputs
+from helpers.formatting import FONT_FAMILY, HELPER_PARAMETERS, LOCALE, TABLE_SOURCE, build_metric_table
+from helpers.market import LAGS, add_market_volatility, get_market_series, summarize_market_dynamics
+from helpers.parameters import parameters
+from helpers.paths import get_repo_root
 from helpers.schemas import read_table
-from helpers.stationarity import item_stationarity
+from msgspec import to_builtins
 
-# %%
-# GitHub shows PNG output but not Vega-Lite.
-alt.renderers.enable("png")
+alt.renderers.enable("png", embed_options={"formatLocale": LOCALE, "timeFormatLocale": LOCALE})
 
-# GitHub drops style blocks, so the tables keep their styles inline.
-inline_table_styles()
+CHART_CONFIG = alt.Config(
+    font=FONT_FAMILY,
+    title=alt.TitleConfig(anchor=HELPER_PARAMETERS.title_anchor, align=HELPER_PARAMETERS.title_align),
+    legend=alt.LegendConfig(orient=HELPER_PARAMETERS.legend_orient),
+)
+
+enable_inline_table_styles()
+
+notebook_parameters = parameters().market
+
+paths = parameters().paths
+
+prices_path = get_repo_root() / paths.prices
+
+tables_path = get_repo_root() / paths.tables
+
+images_path = get_repo_root() / paths.images
+
+tables: dict[str, GT] = {}
+
+charts: dict[str, alt.TopLevelMixin] = {}
 
 DYNAMICS_LABELS = {
-    "market_mean_return": "Retorno diário médio do mercado",
-    "market_std_return": "Desvio padrão do retorno do mercado",
+    "mean_return": "Retorno diário médio do mercado",
+    "std_return": "Desvio padrão do retorno do mercado",
     **{f"market_lag_{lag}": f"Autocorrelação do mercado (defasagem {lag})" for lag in LAGS},
     **{f"asset_lag_{lag}": f"Autocorrelação dentro dos itens (defasagem {lag})" for lag in LAGS},
-    "mean_market_correlation": "Correlação média dos itens com o mercado",
-    "median_market_correlation": "Correlação mediana dos itens com o mercado",
+    "mean_market_correlation": "Correlação média dos itens com o mercado (1)",
+    "median_market_correlation": "Correlação mediana dos itens com o mercado (1)",
 }
 
-DYNAMICS_FORMATS = {
-    "market_mean_return": ".2%",
-    "market_std_return": ".2%",
-    **{f"market_lag_{lag}": ".4f" for lag in LAGS},
-    **{f"asset_lag_{lag}": ".4f" for lag in LAGS},
-    "mean_market_correlation": ".4f",
-    "median_market_correlation": ".4f",
-}
 
-NOISE_LABELS = {
-    "items": "Itens testados",
-    "negative_autocovariance_share": "Itens com autocovariância negativa",
-    "median_roll_spread": "Diferença implícita de Roll (mediana)",
-    "median_variance_ratio": "Razão de variância de 7 dias (itens, mediana)",
-    "market_variance_ratio": "Razão de variância de 7 dias (mercado)",
-}
+prices = read_table("prices", prices_path)
 
-NOISE_FORMATS = {
-    "items": "d",
-    "negative_autocovariance_share": ".1%",
-    "median_roll_spread": ".2%",
-    "median_variance_ratio": ".3f",
-    "market_variance_ratio": ".3f",
-}
+event_name = pl.col("name").replace({"CS2 announcement": "Anúncio do CS2", "CS2 release": "Lançamento do CS2"})
 
-STATIONARITY_LABELS = {
-    "items": "Itens testados",
-    "price_reject_share": "Itens que rejeitam raiz unitária (log do preço)",
-    "price_median_p_value": "p-valor mediano (log do preço)",
-    "return_reject_share": "Itens que rejeitam raiz unitária (retorno)",
-    "return_median_p_value": "p-valor mediano (retorno)",
-}
+event_frame = pl.DataFrame(to_builtins(notebook_parameters.events)).with_columns(
+    pl.col("date").str.to_date(), event_name
+)
 
-STATIONARITY_FORMATS = {
-    "items": "d",
-    "price_reject_share": ".1%",
-    "price_median_p_value": ".3f",
-    "return_reject_share": ".1%",
-    "return_median_p_value": ".3f",
-}
+line_styles = alt.Scale(
+    domain=["Índice de mercado", "Volatilidade móvel", "Anúncio do CS2", "Lançamento do CS2"],
+    range=notebook_parameters.line_styles,
+)
+
+event_rules = (
+    alt.Chart(event_frame)
+    .mark_rule(color="black")
+    .encode(x="date:T", strokeDash=alt.StrokeDash("name:N", title="Série ou evento", scale=line_styles))
+)
+
+volatility_title = f"Desvio padrão ({notebook_parameters.volatility_days} observações)"
 
 # %% [markdown]
-# ## Argumentos da linha de comando
-
-# %%
-parser = ArgumentParser(description="Mercado: índice, dinâmica, ruído de preço e estacionariedade.")
-parser.add_argument("--prices", type=Path, default=repo() / "files/prices.parquet", help="Preços diários limpos.")
-parser.add_argument("--tables", type=Path, default=repo() / "output/tables", help="Pasta para os arquivos das tabelas.")
-parser.add_argument("--images", type=Path, default=repo() / "output/images", help="Pasta para os gráficos.")
-args = parser.parse_args(notebook_arguments())
-
-# %%
-prices = read_table("prices", args.prices)
-market = market_series(prices)
-eda_params = load_params()["eda"]
-
-# %% [markdown]
-# ## Mostrar o índice de mercado e a volatilidade móvel
+# ## Evolução do índice de mercado e da volatilidade
 #
-# As linhas vermelhas marcam o anúncio e o lançamento do CS2, eventos que podem mudar o regime de
-# preços. A volatilidade móvel mostra os períodos de instabilidade em torno desses eventos. A escala
-# logarítmica do índice torna iguais as variações percentuais iguais. O índice acumula a média dos
-# retornos logarítmicos: a média aritmética de retornos ruidosos contém cerca de metade da variância e
-# faria o índice crescer sem ganho real.
+# A linha contínua do painel superior mostra o índice de mercado. A do painel inferior mostra a volatilidade móvel.
+# As linhas verticais marcam o anúncio e o lançamento do CS2. A legenda distingue os eventos pelos padrões de traço.
+#
+# A escala logarítmica representa variações percentuais iguais por distâncias iguais no eixo vertical. O
+# índice acumula a média dos retornos logarítmicos, em vez da média aritmética dos retornos simples.
 
 # %%
-chart_params = load_params()["charts"]
-market_daily = market_with_volatility(market)
-event_frame = pl.DataFrame(chart_params["events"]).with_columns(pl.col("date").str.to_date())
-event_rules = alt.Chart(event_frame).mark_rule(color="red", strokeDash=[4, 4]).encode(x="date:T")
-volatility_title = f"Desvio padrão ({chart_params['volatility_days']} dias)"
+market = get_market_series(prices)
 
-# The log scale gives equal percent moves the same height.
+market_daily = add_market_volatility(market)
+
 index_line = (
     alt.Chart(market_daily)
-    .mark_line()
+    .transform_calculate(series="'Índice de mercado'")
+    .mark_line(color="black")
     .encode(
         x=alt.X("date:T", title="Dia"),
-        y=alt.Y("market_index:Q", title="Índice (início = 1)", scale=alt.Scale(type="log", zero=False, nice=False)),
+        y=alt.Y("index:Q", title="Índice (início = 1)", scale=alt.Scale(type="log", zero=False, nice=False)),
+        strokeDash=alt.StrokeDash("series:N", title="Série ou evento", scale=line_styles),
     )
 )
 
 volatility_line = (
     alt.Chart(market_daily)
-    .mark_line()
-    .encode(x=alt.X("date:T", title="Dia"), y=alt.Y("volatility:Q", title=volatility_title))
+    .transform_calculate(series="'Volatilidade móvel'")
+    .mark_line(color="black")
+    .encode(
+        x=alt.X("date:T", title="Dia"),
+        y=alt.Y("volatility:Q", title=volatility_title),
+        strokeDash=alt.StrokeDash("series:N", title="Série ou evento", scale=line_styles),
+    )
 )
 
-market_figure = alt.vconcat(
-    (index_line + event_rules).properties(width=640, height=220),
-    (volatility_line + event_rules).properties(width=640, height=140),
-)
-market_figure
+charts["market"] = alt.vconcat(
+    (index_line + event_rules).properties(
+        width=HELPER_PARAMETERS.chart_width, height=notebook_parameters.index_height, title="Índice de mercado"
+    ),
+    (volatility_line + event_rules).properties(
+        width=HELPER_PARAMETERS.chart_width,
+        height=notebook_parameters.volatility_height,
+        title="Volatilidade do retorno médio diário",
+    ),
+).properties(config=CHART_CONFIG)
 
 # %% [markdown]
-# ## Medir a dinâmica do mercado
+# **Índice do mercado e volatilidade móvel**
+
+# %% jupyter={"source_hidden": true}
+charts["market"]
+
+# %% [markdown]
+# ## Dependência dos retornos no painel
 #
-# Autocorrelação, correlação com o mercado e testes ADF e ARCH dizem se os retornos são previsíveis, se a
-# série do mercado é estacionária e se a volatilidade se agrupa. Esses resultados condicionam a escolha do
-# modelo.
-
-
-# %%
-def test_text_row(label: str, statistic: float, p_value: float) -> pl.DataFrame:
-    """Write one test as a table row.
-
-    Returns:
-        One row with the label and the statistic with its p-value.
-
-    """
-    text = format_metric(statistic, ".2f") + f" (p = {format_metric(p_value, '.3f')})"
-
-    return pl.DataFrame({"metric_name": [label], "metric_value": [text]})
-
-
-dynamics = market_dynamics(prices, market)
-dynamics_record = dynamics.row(0, named=True)
-
-index_test = test_text_row(
-    "Teste ADF: log do índice do mercado",
-    dynamics_record["adf_index_statistic"],
-    dynamics_record["adf_index_p_value"],
-)
-
-return_test = test_text_row(
-    "Teste ADF: retorno do mercado",
-    dynamics_record["adf_return_statistic"],
-    dynamics_record["adf_return_p_value"],
-)
-
-arch_test_row = test_text_row(
-    f"Teste ARCH-LM: retorno do mercado ({max(LAGS)} defasagens)",
-    dynamics_record["arch_statistic"],
-    dynamics_record["arch_p_value"],
-)
-
-dynamics_gt = (
-    GT(
-        pl.concat(
-            [metric_text_table(dynamics, DYNAMICS_LABELS, DYNAMICS_FORMATS), index_test, return_test, arch_test_row]
-        )
-    )
-    .tab_header(title="Dinâmica do Mercado — CS:GO")
-    .cols_label(metric_name="Métrica", metric_value="Valor")
-    .tab_source_note(
-        "Mercado: média simples dos retornos diários limitados. "
-        "Correlação: itens com 400 dias ou mais de retorno. ADF e ARCH-LM: estatística e p-valor. "
-        "A autocorrelação negativa dentro dos itens pode refletir ruído no preço, não efeito de mercado."
-    )
-)
-dynamics_gt
-
-# %% [markdown]
-# ## Testar o ruído de preço
+# A autocorrelação descreve a associação dos retornos com observações anteriores. A correlação entre cada
+# item e o mercado mostra quanto seus retornos variam em conjunto.
 #
-# O preço de 24 horas é uma média de poucas vendas, então carrega ruído entre a oferta e a demanda. Esse
-# ruído cria autocovariância negativa e uma razão de variância abaixo de um: o preço volta de um dia para o
-# outro. A diferença implícita de Roll, duas vezes a raiz de menos a autocovariância, estima o tamanho do
-# ruído. A razão de variância do mercado fica acima de um: o ruído de cada item não se repete entre os
-# itens, então a média o cancela e deixa o componente comum, que persiste de um dia para o outro.
+# As defasagens do mercado contam observações disponíveis. Dentro dos itens, só entram pares cuja diferença
+# de datas coincide com a defasagem.
 
 # %%
-noise = price_noise(prices, market, eda_params["item_min_days"])
+dynamics = summarize_market_dynamics(prices, market)
 
-noise_gt = (
-    GT(metric_text_table(noise, NOISE_LABELS, NOISE_FORMATS))
-    .tab_header(title="Ruído de Preço — CS:GO")
-    .cols_label(metric_name="Métrica", metric_value="Valor")
-    .tab_source_note(
-        "Itens com 400 dias ou mais de retorno. Autocovariância de primeira ordem do log do retorno. "
-        "Razão de variância: variância da soma de 7 dias seguidos sobre 7 vezes a variância diária. "
-        "Abaixo de 1 indica reversão típica de ruído de preço."
-    )
+dynamics_values = dynamics.select(
+    fmt_percent(pl.col("mean_return", "std_return"), decimals=2, locale=LOCALE),
+    fmt_number(pl.exclude("mean_return", "std_return"), decimals=4, locale=LOCALE),
 )
-noise_gt
+
+tables["dynamics"] = (
+    GT(build_metric_table(dynamics_values, DYNAMICS_LABELS), locale=LOCALE)
+    .tab_source_note(TABLE_SOURCE)
+    .tab_source_note(
+        "Retorno de mercado: média simples dos retornos diários limitados. Desvio padrão amostral. "
+        "As correlações descrevem associações lineares entre os retornos."
+    )
+    .cols_label(metric_name=md("**Métrica**"), metric_value=md("**Valor**"))
+    .tab_source_note(f"(1) Itens com pelo menos {HELPER_PARAMETERS.item_min_days} dias com retorno observado.")
+)
 
 # %% [markdown]
-# ## Testar a estacionariedade por item
-#
-# O teste ADF por item verifica se o log do preço e o retorno têm raiz unitária. Espera-se que poucos itens
-# rejeitem a raiz unitária no preço e quase todos no retorno. A série de cada item usa os dias observados,
-# sem preencher lacunas.
+# **Retornos e dependência no mercado — CS:GO**
 
-# %%
-stationarity = item_stationarity(prices, eda_params["item_min_days"])
-
-stationarity_gt = (
-    GT(metric_text_table(stationarity, STATIONARITY_LABELS, STATIONARITY_FORMATS))
-    .tab_header(title="Estacionariedade por Item — CS:GO")
-    .cols_label(metric_name="Métrica", metric_value="Valor")
-    .tab_source_note(
-        "Teste ADF por item a 5%, com até 7 defasagens. Itens com 400 dias ou mais de retorno. "
-        "A série usa os dias observados, sem preencher lacunas."
-    )
-)
-stationarity_gt
+# %% jupyter={"source_hidden": true}
+tables["dynamics"]
 
 # %% [markdown]
-# ## Exportar tabelas LaTeX e gráficos PNG
+# Os retornos do mercado apresentam autocorrelação positiva nas quatro defasagens analisadas.
+# Dentro dos itens, a autocorrelação negativa na primeira defasagem indica reversão de curto prazo.
+# Nas demais defasagens, a autocorrelação fica próxima de zero.
+# As correlações média e mediana dos itens com o mercado indicam fraca associação linear.
 
-# %%
-tables = {"dynamics": dynamics_gt, "price_noise": noise_gt, "stationarity": stationarity_gt}
-
-write_outputs(tables, {"market": market_figure}, args.tables, args.images)
+# %% jupyter={"source_hidden": true, "outputs_hidden": true}
+write_outputs(tables, charts, tables_path, images_path)

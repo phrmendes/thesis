@@ -1,5 +1,6 @@
 \usepackage[thesis]{academic-templates}
 \usepackage{booktabs}
+\usepackage{longtable}
 \usepackage[hidelinks]{hyperref}
 \usepackage{caption}
 
@@ -11,7 +12,23 @@
 \setlength{\textfloatsep}{6pt}
 
 \renewcommand{\tableformat}{\tablename~\thetable\ --}
-\captionsetup[table]{justification=centering}
+\captionsetup{justification=centering}
+\newcounter{greattable}
+\renewcommand{\LTcaptype}{greattable}
+\makeatletter
+\AtBeginEnvironment{minipage}{%
+    \linespread{1}%
+    \vspace{3pt}%
+    \fontsize{\fpeval{0.85*\f@size}pt}{\fpeval{1.02*\f@size}pt}\selectfont
+}
+\makeatother
+\newcommand{\insertGreatTable}[3]{%
+    \par\ifdim\dimexpr\pagegoal-\pagetotal\relax<8\baselineskip\newpage\fi
+    \vspace{0.5cm}%
+    {\captionof{table}{#1}\label{tab:#2}}%
+    {\setlength{\parindent}{0pt}\setlength{\tabcolsep}{4pt}\input{#3}}%
+    \vspace{0.5cm}%
+}
 \apptocmd{\thesisSettings}{\counterwithout{figure}{section}\counterwithout{table}{section}}{}{}
 \setthesis{{
         "university":"Universidade Federal do ABC",

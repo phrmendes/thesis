@@ -1,6 +1,8 @@
+import numpy as np
 import polars as pl
-from helpers.params import load_params
-from helpers.statistics import column_max, column_min, ratio
+from helpers.parameters import parameters
+from helpers.statistics import calculate_ratio, get_column_max, get_column_min
+from statsmodels.nonparametric.kde import KDEUnivariate
 
 RETURN_COLUMNS = [
     "mean_return",
@@ -23,14 +25,20 @@ RETURN_TABLE_COLUMNS = [
     "sortino",
 ]
 
-TOP_ASSETS = 10
+TOP_ASSETS = parameters().returns.top_assets
 
-LARGE_RETURN = 0.5
+LARGE_RETURN = parameters().returns.large_return
+
+MEASURE_COLUMNS = ["mean_return", "median_return", "std_return", "geometric_return"]
+
+GRID_POINTS = parameters().returns.grid_points
+
+GRID_PADDING = parameters().returns.grid_padding
 
 DISTRIBUTION_TYPE = pl.Enum(["capped", "raw"])
 
 
-def geometric_mean(column: str) -> pl.Expr:
+def build_geometric_mean(column: str) -> pl.Expr:
     """Build the compound daily return of one return column: the exponential of the mean log return, minus one.
 
     Returns:
@@ -40,7 +48,7 @@ def geometric_mean(column: str) -> pl.Expr:
     return (1 + pl.col(column)).log().mean().exp() - 1
 
 
-def return_summary() -> list[pl.Expr]:
+def build_return_summary() -> list[pl.Expr]:
     """Build the summary expressions of the daily return.
 
     Returns:
@@ -52,28 +60,28 @@ def return_summary() -> list[pl.Expr]:
     return [
         returns.mean().alias("mean_return"),
         returns.median().alias("median_return"),
-        geometric_mean("return").alias("geometric_return"),
-        column_min("return").alias("min_return"),
-        column_max("return").alias("max_return"),
+        build_geometric_mean("return").alias("geometric_return"),
+        get_column_min("return").alias("min_return"),
+        get_column_max("return").alias("max_return"),
         returns.std().alias("std_return"),
         returns.filter(returns < 0).std().alias("negative_returns_std"),
     ]
 
 
-def with_return_ratios(summary: pl.DataFrame) -> pl.DataFrame:
+def add_return_ratios(summary: pl.DataFrame) -> pl.DataFrame:
     """Add the daily Sharpe and Sortino ratios.
 
     Returns:
         The summary with the two ratio columns.
 
     """
-    sharpe = ratio(pl.col("mean_return"), pl.col("std_return")).alias("sharpe")
-    sortino = ratio(pl.col("mean_return"), pl.col("negative_returns_std")).alias("sortino")
+    sharpe = calculate_ratio(pl.col("mean_return"), pl.col("std_return")).alias("sharpe")
+    sortino = calculate_ratio(pl.col("mean_return"), pl.col("negative_returns_std")).alias("sortino")
 
     return summary.with_columns(sharpe, sortino)
 
 
-def pooled_return_row(prices: pl.DataFrame, name: str) -> pl.DataFrame:
+def build_pooled_return_row(prices: pl.DataFrame, name: str) -> pl.DataFrame:
     """Summarize every daily return of one frame as a single row.
 
     Returns:
@@ -81,12 +89,12 @@ def pooled_return_row(prices: pl.DataFrame, name: str) -> pl.DataFrame:
 
     """
     days_per_asset = (pl.col("return").count() / pl.col("name").n_unique()).alias("n_days")
-    pooled = prices.select(*return_summary(), days_per_asset)
+    pooled = prices.select(*build_return_summary(), days_per_asset)
 
-    return with_return_ratios(pooled).with_columns(pl.lit(name).alias("name"))
+    return add_return_ratios(pooled).with_columns(pl.lit(name).alias("name"))
 
 
-def asset_return_rows(prices: pl.DataFrame, min_days: int) -> pl.DataFrame:
+def build_asset_return_rows(prices: pl.DataFrame, min_days: int) -> pl.DataFrame:
     """Rank the assets with enough days by their compound daily return.
 
     Returns:
@@ -94,29 +102,29 @@ def asset_return_rows(prices: pl.DataFrame, min_days: int) -> pl.DataFrame:
 
     """
     days = pl.col("return").count().alias("n_days")
-    summary = prices.group_by("name").agg(*return_summary(), days)
-    ranked = with_return_ratios(summary).filter(pl.col("n_days") >= min_days)
+    summary = prices.group_by("name").agg(*build_return_summary(), days)
+    ranked = add_return_ratios(summary).filter(pl.col("n_days") >= min_days)
     rank = (pl.int_range(pl.len()) + 1).alias("rank_n")
 
     return ranked.sort("geometric_return", descending=True).with_columns(rank)
 
 
-def return_statistics(prices: pl.DataFrame, min_days: int | None = None) -> pl.DataFrame:
+def calculate_return_statistics(prices: pl.DataFrame, min_days: int | None = None) -> pl.DataFrame:
     """Summarize daily returns. The top rows are the best items with enough days.
 
     Returns:
         The top rows, the rest row, and the overall row.
 
     """
-    min_days = min_days if min_days is not None else load_params()["eda"]["item_min_days"]
-    top = asset_return_rows(prices, min_days).head(TOP_ASSETS)
+    min_days = min_days if min_days is not None else parameters().helpers.item_min_days
+    top = build_asset_return_rows(prices, min_days).head(TOP_ASSETS)
     rest = prices.filter(~pl.col("name").is_in(top["name"].to_list()))
-    pooled_rows = [pooled_return_row(rest, "rest"), pooled_return_row(prices, "overall")]
+    pooled_rows = [build_pooled_return_row(rest, "rest"), build_pooled_return_row(prices, "overall")]
 
     return pl.concat([top, *pooled_rows], how="diagonal_relaxed").select(RETURN_TABLE_COLUMNS)
 
 
-def distribution_row(prices: pl.DataFrame, column: str, label: str) -> pl.DataFrame:
+def build_distribution_row(prices: pl.DataFrame, column: str, label: str) -> pl.DataFrame:
     """Summarize the pooled distribution of one return column.
 
     Returns:
@@ -131,7 +139,7 @@ def distribution_row(prices: pl.DataFrame, column: str, label: str) -> pl.DataFr
         pl.lit(label, dtype=DISTRIBUTION_TYPE).alias("label"),
         pl.len().alias("n"),
         returns.mean().alias("mean"),
-        geometric_mean(column).alias("geometric_mean"),
+        build_geometric_mean(column).alias("geometric_mean"),
         returns.std().alias("std"),
         returns.skew().alias("skewness"),
         returns.kurtosis().alias("excess_kurtosis"),
@@ -140,14 +148,64 @@ def distribution_row(prices: pl.DataFrame, column: str, label: str) -> pl.DataFr
     )
 
 
-def return_distribution(prices: pl.DataFrame) -> pl.DataFrame:
+def summarize_return_distribution(prices: pl.DataFrame) -> pl.DataFrame:
     """Compare the capped daily return with the raw daily return.
 
     Returns:
         One row per return column.
 
     """
-    capped = distribution_row(prices, "return", "capped")
-    raw = distribution_row(prices, "raw_return", "raw")
+    capped = build_distribution_row(prices, "return", "capped")
+    raw = build_distribution_row(prices, "raw_return", "raw")
 
     return pl.concat([capped, raw])
+
+
+def calculate_item_measures(prices: pl.DataFrame, min_days: int | None = None) -> pl.DataFrame:
+    """Measure the daily returns of each item with enough return days.
+
+    Returns:
+        One row per item with the arithmetic mean, median, sample standard deviation, and geometric mean.
+
+    """
+    min_days = min_days if min_days is not None else parameters().helpers.item_min_days
+    days = pl.col("return").count().alias("n_days")
+
+    return (
+        prices.drop_nulls("return")
+        .group_by("name")
+        .agg(
+            pl.col("return").mean().alias("mean_return"),
+            pl.col("return").median().alias("median_return"),
+            pl.col("return").std().alias("std_return"),
+            build_geometric_mean("return").alias("geometric_return"),
+            days,
+        )
+        .filter(pl.col("n_days") >= min_days)
+        .drop("n_days")
+    )
+
+
+def estimate_measure_densities(measures: pl.DataFrame) -> pl.DataFrame:
+    """Estimate the density of each measure across items.
+
+    The grid runs from the 1st to the 99th percentile, plus a padding on each side so the tails reach zero.
+    Only the standard-deviation grid excludes negative values.
+
+    Returns:
+        One row per measure and grid point with the value and the density.
+
+    """
+    frames = []
+
+    for column in MEASURE_COLUMNS:
+        values = measures[column].drop_nulls().to_numpy()
+        low, high = np.percentile(values, parameters().returns.grid_percentiles)
+        padding = (high - low) * GRID_PADDING
+        start = max(low - padding, 0.0) if column == "std_return" else low - padding
+        grid = np.linspace(start, high + padding, GRID_POINTS)
+        density = KDEUnivariate(values)
+        density.fit()
+        frames.append(pl.DataFrame({"measure": column, "value": grid, "density": density.evaluate(grid)}))
+
+    return pl.concat(frames)

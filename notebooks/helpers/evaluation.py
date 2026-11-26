@@ -1,42 +1,26 @@
-from typing import TYPE_CHECKING
-
 import polars as pl
-
-if TYPE_CHECKING:
-    from datetime import date
-
-EMBARGO_DAYS = 1
+from helpers.schemas import PERIODS
 
 
-def walk_forward_splits(days: list[date], initial_days: int, step_days: int, horizon_days: int) -> pl.DataFrame:
-    """Build expanding-window folds over the observed days, with an embargo between training and testing.
-
-    The training window starts at the first day and grows by `step_days` in each fold.
-    The testing window starts after the embargo and holds `horizon_days`.
-    A fold needs a full testing window.
+def summarize_evaluation_split(prices: pl.DataFrame) -> pl.DataFrame:
+    """Summarize the chronological training, validation, and testing periods.
 
     Returns:
-        One row per fold with the training and testing dates and day counts.
+        One row with date bounds, distinct date counts, and item-day counts for each period.
 
     """
-    ordered = sorted(set(days))
-    folds: list[dict[str, object]] = []
-    training_end = initial_days
+    summaries = []
 
-    while training_end + EMBARGO_DAYS + horizon_days <= len(ordered):
-        test_start = training_end + EMBARGO_DAYS
-        test_end = test_start + horizon_days
-        folds.append(
-            {
-                "fold": len(folds) + 1,
-                "train_start": ordered[0],
-                "train_end": ordered[training_end - 1],
-                "test_start": ordered[test_start],
-                "test_end": ordered[test_end - 1],
-                "train_days": training_end,
-                "test_days": horizon_days,
-            }
+    for period in PERIODS:
+        is_period = pl.col("period") == period
+        dates = pl.col("date").filter(is_period)
+        summaries.extend(
+            [
+                dates.min().alias(f"{period}_start"),
+                dates.max().alias(f"{period}_end"),
+                dates.n_unique().alias(f"{period}_days"),
+                dates.len().alias(f"{period}_records"),
+            ]
         )
-        training_end += step_days
 
-    return pl.DataFrame(folds)
+    return prices.select(summaries)

@@ -1,7 +1,7 @@
-use ./output.nu [msg]
+use ./output.nu [print-message]
 
 # Return the sorted unique days with a day number that starts at one.
-export def day-index []: any -> any {
+export def build-day-index []: any -> any {
     let prices = $in
 
     $prices
@@ -21,7 +21,7 @@ export def day-index []: any -> any {
 export def save-table [path: path]: any -> string {
     let frame = $in
 
-    msg --level debug $"save ($path)"
+    print-message --level debug $"save ($path)"
 
     mkdir (($path | path parse).parent)
 

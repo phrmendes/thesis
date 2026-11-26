@@ -1,67 +1,83 @@
 # %% [markdown]
-# # Carteira de compra e retenção dos itens CS:GO
+# # Seleção e desempenho da carteira buy-and-hold — CS:GO
 #
-# A carteira de compra e retenção é a referência de desempenho mais simples. Este caderno mede se
-# escolher itens pelo treino gera retorno líquido no teste. O resultado serve de base de comparação
-# para o modelo. A ordem segue a decisão: a seleção dos itens, o desempenho da carteira, a comparação com
-# referências e a composição da carteira.
+# Este notebook avalia uma carteira que escolhe os itens com dados de treinamento e mantém as posições durante
+# o período de teste.
+#
+# A análise compara o retorno líquido da carteira com referências simples e carteiras aleatórias. Também
+# apresenta a composição da carteira e a contribuição de cada item.
 
-# %%
-from argparse import ArgumentParser
-from pathlib import Path
-
+# %% jupyter={"source_hidden": true}
 import altair as alt
 import polars as pl
-from great_tables import GT
-from helpers.export import inline_table_styles, write_outputs
-from helpers.formatting import DEC_MARK, SEP_MARK, format_metric, metric_text_table
-from helpers.params import load_params
-from helpers.paths import repo
+from great_tables import GT, md
+from great_tables.vals import fmt_integer, fmt_number, fmt_percent
+from helpers.export import enable_inline_table_styles, write_outputs
+from helpers.formatting import FONT_FAMILY, HELPER_PARAMETERS, LOCALE, TABLE_SOURCE, build_metric_table, wrap_chart_note
+from helpers.parameters import parameters
+from helpers.paths import get_repo_root
 from helpers.portfolio import (
-    asset_multiples,
-    benchmark_paths,
-    benchmark_summary,
-    eligible_assets,
-    hold_positions,
-    item_contributions,
-    k_sweep_summary,
-    meets_thresholds,
-    portfolio_rarity,
-    portfolio_returns,
-    portfolio_summary,
-    threshold_pass_counts,
-    training_candidates,
-    with_training_ratios,
+    add_selection_ratios,
+    build_benchmark_paths,
+    build_hold_positions,
+    calculate_asset_multiples,
+    calculate_item_contributions,
+    calculate_portfolio_returns,
+    check_thresholds,
+    count_threshold_passes,
+    select_candidates,
+    select_eligible_assets,
+    select_portfolio_size,
+    summarize_benchmarks,
+    summarize_k_sweep,
+    summarize_portfolio,
+    summarize_portfolio_rarity,
 )
-from helpers.runtime import notebook_arguments
 from helpers.schemas import read_table
 
-# %%
-# GitHub shows PNG output but not Vega-Lite.
-alt.renderers.enable("png")
+alt.renderers.enable("png", embed_options={"formatLocale": LOCALE, "timeFormatLocale": LOCALE})
 
-# GitHub drops style blocks, so the tables keep their styles inline.
-inline_table_styles()
+CHART_CONFIG = alt.Config(
+    font=FONT_FAMILY,
+    title=alt.TitleConfig(anchor=HELPER_PARAMETERS.title_anchor, align=HELPER_PARAMETERS.title_align),
+    legend=alt.LegendConfig(orient=HELPER_PARAMETERS.legend_orient),
+)
 
-WIDE_TABLES = frozenset({"portfolio_items"})
+enable_inline_table_styles()
+
+notebook_parameters = parameters().portfolios
+
+paths = parameters().paths
+
+prices_path = get_repo_root() / paths.prices
+
+tables_path = get_repo_root() / paths.tables
+
+images_path = get_repo_root() / paths.images
+
+buy_and_hold_path = get_repo_root() / paths.buy_and_hold
+
+portfolio_path = get_repo_root() / paths.portfolio
+
+universe_path = get_repo_root() / paths.portfolio_universe
+
+fee_label = pl.select(fmt_percent(pl.lit(1 - notebook_parameters.net_sale_share), decimals=2, locale=LOCALE)).item()
+
+rank_label = {"roi": "ROI", "sharpe": "Sharpe", "sortino": "Sortino"}[notebook_parameters.rank]
+
+tables: dict[str, GT] = {}
+
+charts: dict[str, alt.TopLevelMixin] = {}
 
 PORTFOLIO_LABELS = {
     "assets": "Itens",
     "days": "Dias de teste",
-    "sale_fee": "Taxa de venda (%)",
+    "sale_fee": "Taxa de venda em % (1)",
     "roi": "ROI",
     "sharpe": "Sharpe",
-    "sortino": "Sortino",
+    "sortino": "Sortino (2)",
 }
 
-PORTFOLIO_FORMATS = {
-    "assets": "d",
-    "days": "d",
-    "sale_fee": ".0f",
-    "roi": ".2%",
-    "sharpe": ".3f",
-    "sortino": ".3f",
-}
 
 RARITY_COLUMNS = ["candidate_assets", "selected_assets"]
 
@@ -69,262 +85,464 @@ SHARE_COLUMNS = ["candidate_share", "selected_share"]
 
 PATH_LABELS = {"selected": "Selecionada", "candidates": "Todos os candidatos", "eligible": "Todos os elegíveis"}
 
-# %% [markdown]
-# ## Argumentos da linha de comando
+prices = read_table("prices", prices_path).sort("name", "date")
 
-# %%
-portfolio_params = load_params()["portfolio"]
+thresholds = {
+    "roi": notebook_parameters.min_roi,
+    "sharpe": notebook_parameters.min_sharpe,
+    "sortino": notebook_parameters.min_sortino,
+}
 
-parser = ArgumentParser(description="Carteira de compra e retenção com pesos iguais.")
-parser.add_argument("--prices", type=Path, default=repo() / "files/prices.parquet", help="Preços diários limpos.")
-parser.add_argument("--k", type=int, default=10, help="Número de itens na carteira.")
-parser.add_argument("--rank", choices=["roi", "sharpe", "sortino"], default="roi", help="Razão de treino.")
-parser.add_argument("--roi", type=float, default=portfolio_params["min_roi"], help="ROI mínimo no treino.")
-parser.add_argument("--sharpe", type=float, default=portfolio_params["min_sharpe"], help="Sharpe mínimo no treino.")
-parser.add_argument("--sortino", type=float, default=portfolio_params["min_sortino"], help="Sortino mínimo no treino.")
-parser.add_argument(
-    "--buy-and-hold",
-    type=Path,
-    default=repo() / "files/buy_and_hold.parquet",
-    help="Linhas diárias da carteira.",
-)
-parser.add_argument("--output", type=Path, default=repo() / "files/portfolio.parquet", help="Métricas da carteira.")
-parser.add_argument("--tables", type=Path, default=repo() / "output/tables", help="Pasta para os arquivos das tabelas.")
-parser.add_argument("--images", type=Path, default=repo() / "output/images", help="Pasta para os gráficos.")
-args = parser.parse_args(notebook_arguments())
+min_roi_label = pl.select(fmt_percent(pl.lit(notebook_parameters.min_roi), decimals=0, locale=LOCALE)).item()
 
-if args.k < 1:
-    message = "k must be positive"
-    raise SystemExit(message)
+min_sharpe_label = pl.select(fmt_number(pl.lit(notebook_parameters.min_sharpe), decimals=3, locale=LOCALE)).item()
 
-# %%
-prices = read_table("prices", args.prices).sort("name", "date")
-thresholds = {"roi": args.roi, "sharpe": args.sharpe, "sortino": args.sortino}
-
-# %% [markdown]
-# ## Selecionar itens elegíveis nos dias de treino
-#
-# A seleção usa apenas os dias de treino. Isso impede que informação do período de teste influencie
-# a carteira. Só entram itens com preço de 24 horas em até sete dias antes do primeiro dia de teste, pois
-# só eles podem ser comprados. Os preços de entrada, de saída e de treino são medianas dos últimos
-# preços observados, para que o ruído de um único preço não decida o ROI.
-#
-# Os limites usam razões diárias sem anualização. Guede-Fernández et al. (2025) exigem Sharpe ≥ 1,
-# Sortino ≥ 2 e ROI ≥ 5% e não informam a frequência dos retornos, então os limites daqui, menores, não
-# são comparáveis aos deles. O custo de venda é 15% (5% da Steam e 10% do jogo), contra 10% no artigo. O
-# artigo mantém só itens com histórico diário completo. Este trabalho exige um mínimo de observações no
-# treino e não preenche preços. A tabela mostra quantos candidatos passam por cada limite.
-
-# %%
-candidates = training_candidates(prices)
-selected = eligible_assets(candidates, args.k, args.rank, thresholds)
-pass_counts = threshold_pass_counts(candidates, thresholds)
+min_sortino_label = pl.select(fmt_number(pl.lit(notebook_parameters.min_sortino), decimals=3, locale=LOCALE)).item()
 
 threshold_labels = {
-    "candidates": "Candidatos com preço até sete dias antes do teste",
-    "roi": f"ROI de treino ≥ {format_metric(args.roi, '.0%')}",
-    "sharpe": f"Sharpe diário de treino ≥ {format_metric(args.sharpe, '.3f')}",
-    "sortino": f"Sortino diário de treino ≥ {format_metric(args.sortino, '.3f')}",
+    "candidates": f"Candidatos com preço até {notebook_parameters.max_stale_days} dias antes da validação",
+    "roi": f"ROI de treinamento ≥ {min_roi_label}",
+    "sharpe": f"Sharpe diário de treinamento ≥ {min_sharpe_label}",
+    "sortino": f"Sortino diário de treinamento ≥ {min_sortino_label}",
     "all": "Os três limites juntos",
 }
 
-thresholds_gt = (
-    GT(metric_text_table(pass_counts, threshold_labels, dict.fromkeys(threshold_labels, "d")))
-    .tab_header(title="Candidatos que Passam pelos Limites de Treino — CS:GO")
-    .cols_label(metric_name="Critério", metric_value="Itens")
-    .tab_source_note(
-        "Razões diárias, sem anualização. A carteira escolhe os melhores itens entre os que passam nos três limites."
-    )
-)
-thresholds_gt
-
-# %% [markdown]
-# ## Comparar a raridade dos itens escolhidos com a dos candidatos
-#
-# A tabela mostra se a seleção pelo treino concentra a carteira em uma raridade.
-
-# %%
-rarity = portfolio_rarity(candidates, selected, prices)
-
-rarity_gt = (
-    GT(rarity)
-    .cols_align("left", columns="rarity")
-    .tab_header(title="Raridade dos Itens da Carteira — CS:GO")
-    .fmt_integer(columns=RARITY_COLUMNS, sep_mark=SEP_MARK)
-    .fmt_percent(columns=SHARE_COLUMNS, decimals=1, sep_mark=SEP_MARK, dec_mark=DEC_MARK)
-    .cols_label(
-        rarity="Raridade",
-        candidate_assets="Candidatos",
-        candidate_share="Parcela dos candidatos",
-        selected_assets="Selecionados",
-        selected_share="Parcela dos selecionados",
-    )
-    .tab_source_note("Candidatos: itens com preço até sete dias antes do primeiro dia de teste.")
-)
-rarity_gt
-
-# %% [markdown]
-# ## Manter a carteira nos dias de teste e medir o desempenho
-#
-# A carteira mantém os itens escolhidos sem rebalanceamento. O item que deixa de ter preço mantém o
-# último valor. Assim a carteira não inventa retornos nem encerra a posição antes do fim. ROI, Sharpe e
-# Sortino diários resumem o desempenho. A taxa de venda de 15% entra uma só vez, no último dia, porque a
-# estratégia vende apenas no final.
-
-# %%
-rows = portfolio_returns(hold_positions(prices, selected.select("name"), args.k))
-metrics = portfolio_summary(rows, args.k)
-
-portfolio_gt = (
-    GT(metric_text_table(metrics, PORTFOLIO_LABELS, PORTFOLIO_FORMATS))
-    .tab_header(title="Carteira de Compra e Retenção — CS:GO")
-    .cols_label(metric_name="Métrica", metric_value="Valor")
-    .tab_source_note(
-        "Carteira igualmente ponderada nos dias de teste, sem rebalanceamento. "
-        "Taxa de venda de 15% no último dia (5% Steam e 10% do jogo). "
-        "Razões diárias com taxa livre de risco zero. "
-        "Sortino: média sobre o DP dos dias negativos. Sem preço no dia, a posição mantém o último preço."
-    )
-)
-portfolio_gt
-
-# %% [markdown]
-# ## Comparar a carteira com as referências
-#
-# Uma carteira de dez itens é um único sorteio. Três referências mostram o que esperar sem seleção: todos
-# os candidatos, todos os elegíveis e carteiras aleatórias do mesmo tamanho. O percentil diz em quantos
-# sorteios aleatórios o ROI fica abaixo ou igual ao da carteira selecionada.
-
-# %%
-multiples = asset_multiples(prices)
-eligible = with_training_ratios(candidates).filter(meets_thresholds(thresholds))
-benchmarks = benchmark_summary(multiples, eligible, selected)
-
-benchmark_labels = {
-    "selected": f"Carteira selecionada (k = {args.k})",
+BENCHMARK_LABELS = {
     "candidates": "Todos os candidatos",
     "eligible": "Todos os elegíveis",
     "median_candidate": "Item mediano entre os candidatos",
-    "random_eligible": "Aleatória entre elegíveis (média)",
-    "random_candidates": "Aleatória entre candidatos (média)",
+    "random_eligible": "Itens elegíveis",
+    "random_candidates": "Todos os candidatos",
 }
 
-benchmarks_text = benchmarks.with_columns(pl.col("portfolio").replace_strict(benchmark_labels, return_dtype=pl.String))
-
-benchmarks_gt = (
-    GT(benchmarks_text)
-    .cols_align("left", columns="portfolio")
-    .tab_header(title="Carteira Selecionada contra Referências — CS:GO")
-    .fmt_percent(columns=["roi", "p05", "p95"], decimals=2, sep_mark=SEP_MARK, dec_mark=DEC_MARK)
-    .fmt_percent(columns=["selected_percentile"], decimals=0, sep_mark=SEP_MARK, dec_mark=DEC_MARK)
-    .sub_missing(missing_text="n/d")
-    .cols_label(
-        portfolio="Carteira",
-        roi="ROI líquido",
-        p05="P5",
-        p95="P95",
-        selected_percentile="Percentil da selecionada",
-    )
-    .tab_source_note(
-        f"Compra e retenção com pesos iguais e taxa de venda de 15%. As carteiras aleatórias têm {args.k} itens "
-        f"e vêm de {format_metric(portfolio_params['random_draws'], 'd')} sorteios. "
-        "Percentil: parcela dos sorteios com ROI igual ou menor ao da selecionada."
-    )
-)
-benchmarks_gt
-
 # %% [markdown]
-# A varredura mostra se o resultado depende do número de itens da carteira.
+# ## Candidatos definidos com dados de treinamento
+#
+# A seleção considera apenas os dados de treinamento. Os candidatos precisam de um preço observado próximo ao
+# início da validação.
+#
+# Os preços de entrada, saída e treinamento usam medianas das últimas observações disponíveis. Isso reduz a
+# influência de um único preço sobre o ROI.
+#
+# Guede-Fernández et al. (2025) usam Sharpe ≥ 1, Sortino ≥ 2 e ROI ≥ 5%, mas não informam a frequência dos
+# retornos. Por isso, seus limites não são diretamente comparáveis aos limites diários deste trabalho.
+#
+# Este trabalho usa a taxa de venda definida nos parâmetros. O artigo adota uma taxa de 10%.
+# Os autores também exigem histórico diário completo. Este trabalho exige um mínimo de observações no treinamento
+# e não preenche preços ausentes. A tabela informa quantos candidatos atendem a cada critério.
 
 # %%
-sweep = k_sweep_summary(prices, candidates, args.rank, thresholds)
+training_candidates = select_candidates(prices, holding_period="validation")
 
-sweep_gt = (
-    GT(sweep)
-    .tab_header(title="Carteira por Número de Itens — CS:GO")
-    .fmt_integer(columns=["assets"], sep_mark=SEP_MARK)
-    .fmt_percent(columns=["roi"], decimals=2, sep_mark=SEP_MARK, dec_mark=DEC_MARK)
-    .fmt_number(columns=["sharpe", "sortino"], decimals=3, sep_mark=SEP_MARK, dec_mark=DEC_MARK)
-    .cols_label(assets="Itens", roi="ROI líquido", sharpe="Sharpe", sortino="Sortino")
-    .tab_source_note("Itens ordenados pelo ROI de treino entre os que passam nos três limites. Razões diárias.")
+pass_counts = count_threshold_passes(training_candidates, thresholds)
+
+threshold_values = pass_counts.select(fmt_integer(pl.all(), locale=LOCALE))
+
+# %%
+tables["portfolio_thresholds"] = (
+    GT(build_metric_table(threshold_values, threshold_labels), locale=LOCALE)
+    .tab_source_note(TABLE_SOURCE)
+    .tab_source_note(
+        f"Razões diárias, sem anualização. A carteira ordena os itens por {rank_label} "
+        "entre os que passam nos três limites."
+    )
+    .cols_label(metric_name=md("**Critério**"), metric_value=md("**Itens**"))
 )
-sweep_gt
 
 # %% [markdown]
-# A curva de valor mostra o caminho de cada carteira nos dias de teste. O valor começa em um no dia de
-# entrada e não inclui a taxa de venda. Uma carteira que fica abaixo das referências em quase todos os dias
-# não depende só do preço de saída.
+# **Candidatos que passam pelos limites de treinamento — CS:GO**
+
+# %% jupyter={"source_hidden": true}
+tables["portfolio_thresholds"]
+
+# %% [markdown]
+# ## Tamanhos de carteira na validação
+#
+# Os itens seguem a classificação obtida no treinamento. Os retornos da validação permitem comparar os tamanhos.
+# A regra automática admite uma perda de ROI dentro da margem configurada em relação ao melhor ROI da validação.
+# Entre essas carteiras, a regra escolhe o maior Sharpe diário. Em caso de empate, escolhe o menor tamanho.
+
+# %%
+sweep = summarize_k_sweep(
+    prices, training_candidates, notebook_parameters.rank, thresholds, holding_period="validation"
+)
+
+selected_k = select_portfolio_size(sweep, notebook_parameters.roi_tolerance)
+
+is_selected_size = pl.col("assets") == selected_k
+
+selection_label = pl.when(is_selected_size).then(pl.lit("Escolhida")).otherwise(pl.lit("")).alias("selection")
+
+sweep = sweep.with_columns(selection_label)
+
+roi_tolerance_label = pl.select(
+    fmt_number(pl.lit(notebook_parameters.roi_tolerance * 100), decimals=2, locale=LOCALE)
+).item()
+
+tables["portfolio_sweep"] = (
+    GT(sweep, locale=LOCALE)
+    .tab_source_note(TABLE_SOURCE)
+    .tab_source_note(
+        f"Itens em ordem decrescente de {rank_label} no treinamento. Retornos da validação e razões diárias. "
+        "A tabela inclui apenas tamanhos com itens elegíveis suficientes. "
+        f"A regra automática admite até {roi_tolerance_label} pontos percentuais "
+        "abaixo do maior ROI e maximiza o Sharpe. Empates favorecem a menor carteira. "
+        f"Tamanho adotado: {selected_k} itens. Somente a validação define a escolha automática."
+    )
+    .fmt_integer(columns=["assets"])
+    .fmt_percent(columns=["roi"], decimals=2)
+    .fmt_number(columns=["sharpe", "sortino"], decimals=3)
+    .cols_label(
+        assets=md("**Itens**"),
+        roi=md("**ROI líquido**"),
+        sharpe=md("**Sharpe**"),
+        sortino=md("**Sortino**"),
+        selection=md("**Escolha**"),
+    )
+)
+
+# %% [markdown]
+# **Comparação de tamanhos de carteira na validação — CS:GO**
+
+# %% jupyter={"source_hidden": true}
+tables["portfolio_sweep"]
+
+# %% [markdown]
+# A margem limita o ROI sacrificado em relação ao melhor resultado da validação.
+# O teste não participa da escolha automática do tamanho da carteira.
+
+# %% [markdown]
+# ## Carteira final com treinamento e validação
+#
+# Após definir o tamanho, a seleção usa o histórico completo de treinamento e validação.
+# O universo básico e os limites de limpeza permanecem fixos com os dados do treinamento inicial.
+# As duas estratégias compartilham o universo elegível e o tamanho da carteira, mas podem escolher itens diferentes.
+
+# %%
+candidates = select_candidates(prices)
+
+eligible = add_selection_ratios(candidates).filter(check_thresholds(thresholds)).sort("name")
+
+selected = select_eligible_assets(candidates, selected_k, notebook_parameters.rank, thresholds)
+
+benchmark_labels = {"selected": f"Carteira selecionada ({selected_k} itens)", **BENCHMARK_LABELS}
+
+# %% [markdown]
+# ## Raridade dos itens escolhidos e dos candidatos
+#
+# A tabela compara a distribuição das raridades entre os candidatos e os itens selecionados. Ela mostra se a
+# seleção concentra a carteira em determinadas raridades.
+
+# %%
+rarity = summarize_portfolio_rarity(candidates, selected, prices)
+
+tables["portfolio_rarity"] = (
+    GT(rarity, locale=LOCALE)
+    .tab_options(table_font_size="8pt")
+    .tab_source_note(TABLE_SOURCE)
+    .tab_source_note(
+        "Ordem crescente de raridade, com ordem alfabética no mesmo nível. Itens sem raridade aparecem ao final."
+    )
+    .cols_align("left", columns="rarity")
+    .fmt_integer(columns=RARITY_COLUMNS)
+    .fmt_percent(columns=SHARE_COLUMNS, decimals=1)
+    .cols_label(
+        rarity=md("**Raridade**"),
+        candidate_assets=md("**Candidatos** (1)"),
+        candidate_share=md("**Parcela dos candidatos** (1)"),
+        selected_assets=md("**Selecionados**"),
+        selected_share=md("**Parcela dos selecionados**"),
+    )
+    .tab_source_note(
+        f"(1) Itens com preço até {notebook_parameters.max_stale_days} dias antes do primeiro dia de teste."
+    )
+)
+
+# %% [markdown]
+# **Raridade dos itens da carteira — CS:GO**
+
+# %% jupyter={"source_hidden": true}
+tables["portfolio_rarity"]
+
+# %% [markdown]
+# ## Desempenho da carteira no período de teste
+#
+# A carteira mantém os itens selecionados, sem rebalanceamento. Nos dias sem preço observado, o cálculo mantém
+# o último valor disponível para avaliar a posição.
+#
+# Esse procedimento não preenche a série de preços usada nas análises dos retornos dos itens. ROI, Sharpe e
+# Sortino resumem o desempenho, sempre na frequência diária.
+#
+# A taxa de venda configurada incide uma única vez, no último dia do período.
+
+# %%
+rows = calculate_portfolio_returns(build_hold_positions(prices, selected.select("name"), selected_k))
+
+metrics = summarize_portfolio(rows, selected_k)
+
+portfolio_values = metrics.select(
+    fmt_integer(pl.col("assets", "days"), locale=LOCALE),
+    fmt_number(pl.col("sale_fee"), decimals=2, locale=LOCALE),
+    fmt_percent(pl.col("roi"), decimals=2, locale=LOCALE),
+    fmt_number(pl.col("sharpe", "sortino"), decimals=3, locale=LOCALE),
+)
+
+tables["portfolio"] = (
+    GT(build_metric_table(portfolio_values, PORTFOLIO_LABELS), locale=LOCALE)
+    .tab_source_note(TABLE_SOURCE)
+    .tab_source_note(
+        "Carteira igualmente ponderada nos dias de teste, sem rebalanceamento. "
+        "Razões diárias com taxa livre de risco zero. Sem preço no dia, a posição mantém o último preço."
+    )
+    .cols_label(metric_name=md("**Métrica**"), metric_value=md("**Valor**"))
+    .tab_source_note(f"(1) Taxa de venda de {fee_label} sobre a venda final.")
+    .tab_source_note(
+        "(2) O Sortino divide a média dos retornos diários pelo desvio-padrão amostral dos retornos negativos."
+    )
+)
+
+# %% [markdown]
+# **Carteira buy-and-hold — CS:GO**
+
+# %% jupyter={"source_hidden": true}
+tables["portfolio"]
+
+# %% [markdown]
+# ## Desempenho da carteira e das referências
+#
+# A primeira tabela compara o ROI líquido da carteira selecionada com referências fixas.
+# Na segunda, a comparação com carteiras aleatórias inclui ROI, volatilidade diária e Sharpe diário.
+# Os percentis da terceira tabela situam a carteira selecionada na distribuição dos sorteios.
+
+# %%
+multiples = calculate_asset_multiples(prices)
+
+# %%
+benchmark_statistics = summarize_benchmarks(prices, multiples, eligible, selected)
+
+is_random_portfolio = pl.col("portfolio").str.starts_with("random_")
+
+benchmarks = (
+    benchmark_statistics.filter(~is_random_portfolio)
+    .select("portfolio", "roi")
+    .with_columns(pl.col("portfolio").replace_strict(benchmark_labels, return_dtype=pl.String))
+)
+
+tables["portfolio_benchmarks"] = (
+    GT(benchmarks, locale=LOCALE)
+    .tab_source_note(TABLE_SOURCE)
+    .tab_source_note(f"Buy-and-hold com ponderação igual e taxa de venda de {fee_label}.")
+    .cols_align("left", columns="portfolio")
+    .fmt_percent(columns="roi", decimals=2)
+    .cols_label(portfolio=md("**Carteira ou referência**"), roi=md("**ROI líquido**"))
+)
+
+# %% [markdown]
+# **ROI líquido da carteira buy-and-hold e das referências — CS:GO**
+
+# %% jupyter={"source_hidden": true}
+tables["portfolio_benchmarks"]
+
+# %%
+random_benchmarks = benchmark_statistics.filter(is_random_portfolio)
+
+random_comparison = pl.concat(
+    [
+        rows.select(
+            pl.lit(f"Selecionada por {rank_label}").alias("portfolio"),
+            pl.col("roi").first(),
+            pl.col("return").std().alias("volatility"),
+            pl.col("sharpe").first(),
+        ),
+        random_benchmarks.select("portfolio", "roi", "volatility", "sharpe").with_columns(
+            pl.col("portfolio").replace_strict(
+                {
+                    "random_eligible": "Aleatórias — elegíveis (média)",
+                    "random_candidates": "Aleatórias — candidatos (média)",
+                },
+                return_dtype=pl.String,
+            )
+        ),
+    ]
+)
+
+random_draws_label = pl.select(fmt_integer(pl.lit(notebook_parameters.random_draws), locale=LOCALE)).item()
+
+tables["portfolio_random"] = (
+    GT(random_comparison, locale=LOCALE)
+    .tab_options(table_font_size="11pt")
+    .tab_source_note(TABLE_SOURCE)
+    .tab_source_note(
+        f"Todas as carteiras mantêm {selected_k} itens, com ponderação inicial igual e sem rebalanceamento. "
+        f"Nas linhas aleatórias, cada valor representa a média em {random_draws_label} "
+        "carteiras do universo indicado. Os retornos referem-se ao período de teste. "
+        "Volatilidade: desvio-padrão amostral dos retornos diários. "
+        "Sharpe diário, sem anualização e com taxa livre de risco zero. "
+        f"As medidas incluem a taxa de venda final de {fee_label}. O Sharpe médio considera apenas valores definidos."
+    )
+    .cols_align("left", columns="portfolio")
+    .fmt_percent(columns=["roi", "volatility"], decimals=2)
+    .fmt_number(columns="sharpe", decimals=3)
+    .sub_missing(columns="sharpe", missing_text="n/d")
+    .cols_label(
+        portfolio=md("**Carteira**"),
+        roi=md("**ROI líquido**"),
+        volatility=md("**Volatilidade diária**"),
+        sharpe=md("**Sharpe diário**"),
+    )
+)
+
+# %% [markdown]
+# **Comparação direta entre carteiras buy-and-hold — CS:GO**
+
+# %% jupyter={"source_hidden": true}
+tables["portfolio_random"]
+
+# %%
+random_distribution = random_benchmarks.select(
+    "portfolio", "p05", "p95", "selected_percentile", "selected_sharpe_percentile"
+).with_columns(pl.col("portfolio").replace_strict(benchmark_labels, return_dtype=pl.String))
+
+tables["portfolio_random_distribution"] = (
+    GT(random_distribution, locale=LOCALE)
+    .tab_options(table_font_size="9pt")
+    .tab_source_note(TABLE_SOURCE)
+    .tab_source_note(
+        "P5 e P95 são os percentis 5 e 95 dos ROIs dos sorteios. "
+        "Os percentis comparam a carteira selecionada da tabela anterior com os sorteios de cada universo. "
+        "Os percentis do Sharpe consideram apenas valores definidos."
+    )
+    .cols_align("left", columns="portfolio")
+    .fmt_percent(columns=["p05", "p95"], decimals=2)
+    .fmt_percent(columns=["selected_percentile", "selected_sharpe_percentile"], decimals=0)
+    .sub_missing(columns="selected_sharpe_percentile", missing_text="n/d")
+    .cols_label(
+        portfolio=md("**Universo dos sorteios**"),
+        p05=md("**P5 do ROI**"),
+        p95=md("**P95 do ROI**"),
+        selected_percentile=md("**Percentil do ROI** (1)"),
+        selected_sharpe_percentile=md("**Percentil do Sharpe** (1)"),
+    )
+    .tab_source_note(
+        "(1) Parcela dos sorteios cujo ROI ou Sharpe não supera o valor correspondente da carteira selecionada."
+    )
+)
+
+# %% [markdown]
+# **Distribuição dos resultados das carteiras aleatórias — CS:GO**
+
+# %% jupyter={"source_hidden": true}
+tables["portfolio_random_distribution"]
+
+# %% [markdown]
+# A carteira apresenta ROI líquido positivo no teste, mas a maioria das carteiras aleatórias dos dois universos
+# obtém retorno maior. A seleção pelo ROI histórico não supera a maioria dos sorteios em ROI neste período.
+# O Sharpe da carteira também é inferior ao da maioria dos sorteios nos dois universos.
+#
+# A comparação final do modelo preditivo incluirá o buy-and-hold e carteiras aleatórias com o mesmo tamanho e
+# universo elegível. O estudo manterá o período de teste, a ponderação inicial e as regras de custos comuns às
+# estratégias. A tabela apresentará ROI, volatilidade diária, Sharpe diário e os percentis das estratégias entre
+# os sorteios.
+
+# %% [markdown]
+# ## Evolução das carteiras no teste
+#
+# As curvas mostram a evolução do valor das carteiras durante o teste, antes da taxa de venda. A escala
+# usa o capital inicial como referência. A comparação permite observar o desempenho ao longo do período,
+# não apenas no encerramento.
 
 # %%
 groups = {"selected": selected, "candidates": candidates, "eligible": eligible}
-paths = benchmark_paths(prices, groups)
-paths_text = paths.with_columns(pl.col("portfolio").replace_strict(PATH_LABELS, return_dtype=pl.String))
 
-value_figure = (
-    alt.Chart(paths_text)
-    .mark_line()
+path_labels = {
+    label: f"{PATH_LABELS[label]} ({pl.select(fmt_integer(pl.lit(assets.height), locale=LOCALE)).item()} itens)"
+    for label, assets in groups.items()
+}
+
+paths = build_benchmark_paths(prices, groups).with_columns(
+    pl.col("portfolio").replace_strict(path_labels, return_dtype=pl.String)
+)
+
+charts["portfolio_value"] = (
+    alt.Chart(paths)
+    .mark_line(color="black")
     .encode(
         x=alt.X("date:T", title="Dia"),
-        y=alt.Y("value:Q", title="Valor (entrada = 1)", scale=alt.Scale(zero=False)),
-        color=alt.Color("portfolio:N", title="Carteira"),
+        y=alt.Y("value:Q", title="Índice de valor da carteira (base 1)", scale=alt.Scale(zero=False)),
+        strokeDash=alt.StrokeDash("portfolio:N", title="Carteira"),
     )
-    .properties(width=640, height=360)
+    .properties(
+        width=HELPER_PARAMETERS.chart_width,
+        height=HELPER_PARAMETERS.chart_height,
+        title=alt.Title(
+            wrap_chart_note(
+                "Capital inicial = 1. Ponderação inicial igual, sem rebalanceamento.",
+                f"Valores antes da taxa de venda final de {fee_label}.",
+            ),
+            anchor="start",
+            orient="bottom",
+            fontSize=10,
+            fontWeight="normal",
+        ),
+    )
+    .properties(config=CHART_CONFIG)
 )
-value_figure
 
 # %% [markdown]
-# ## Detalhar a contribuição de cada item
+# **Valor das carteiras nos dias de teste**
+
+# %% jupyter={"source_hidden": true}
+charts["portfolio_value"]
+
+# %% [markdown]
+# ## Contribuição de cada item
 #
-# A tabela mostra o múltiplo de cada item escolhido, do preço de entrada ao de saída, e quanto ele
-# contribui para o retorno bruto da carteira. Poucos itens com múltiplos altos podem explicar quase todo o
-# retorno.
+# A tabela mostra a razão entre os preços de saída e entrada de cada item. Também informa quanto cada posição
+# contribui para o retorno bruto da carteira.
+#
+# Essa decomposição permite verificar se poucos itens concentram o resultado.
 
 # %%
-contributions = item_contributions(selected, multiples, prices)
+contributions = calculate_item_contributions(selected, multiples, prices)
 
-contributions_gt = (
-    GT(contributions)
-    .cols_align("left", columns=["name", "rarity"])
-    .tab_header(title="Contribuição de Cada Item da Carteira — CS:GO")
-    .fmt_percent(columns=["roi", "contribution"], decimals=1, sep_mark=SEP_MARK, dec_mark=DEC_MARK)
-    .fmt_number(columns=["entry_price", "exit_price", "multiple"], decimals=2, sep_mark=SEP_MARK, dec_mark=DEC_MARK)
-    .cols_label(
-        name="Item",
-        rarity="Raridade",
-        roi="ROI de treino",
-        entry_price="Preço de entrada (US$)",
-        exit_price="Preço de saída (US$)",
-        multiple="Múltiplo",
-        contribution="Contribuição ao retorno bruto",
-    )
+tables["portfolio_items"] = (
+    GT(contributions, locale=LOCALE)
+    .tab_options(table_font_size="6pt")
+    .tab_source_note(TABLE_SOURCE)
     .tab_source_note(
-        "Múltiplo: preço de saída sobre preço de entrada, ambos medianas dos últimos preços observados. "
-        "Contribuição: (múltiplo - 1) dividido pelo número de itens, antes da taxa de venda."
+        "ROI hist.: ROI de seleção no histórico. Entrada e saída em US$, como mediana das últimas observações."
     )
+    .cols_align("left", columns=["name", "rarity"])
+    .fmt_percent(columns=["roi", "contribution"], decimals=1)
+    .fmt_number(columns=["entry_price", "exit_price", "multiple"], decimals=2)
+    .cols_label(
+        name=md("**Item**"),
+        rarity=md("**Raridade**"),
+        roi=md("**ROI hist.**"),
+        entry_price=md("**Entrada**"),
+        exit_price=md("**Saída**"),
+        multiple=md("**Múltiplo** (1)"),
+        contribution=md("**Contrib.** (2)"),
+    )
+    .tab_source_note("(1) Razão entre os preços de saída e entrada.")
+    .tab_source_note("(2) (Múltiplo - 1) dividido pelo número de itens, antes da taxa de venda.")
 )
-contributions_gt
 
 # %% [markdown]
-# ## Exportar a carteira em Parquet, as tabelas em LaTeX e o gráfico em PNG
-#
-# As linhas diárias e o resumo ficam em Parquet para análises posteriores. As tabelas e o gráfico são
-# gravados juntos, para que a tese use resultados da mesma execução.
+# **Contribuição de cada item da carteira — CS:GO**
 
-# %%
-for path in (args.buy_and_hold, args.output):
+# %% jupyter={"source_hidden": true}
+tables["portfolio_items"]
+
+# %% jupyter={"source_hidden": true, "outputs_hidden": true}
+for path in (buy_and_hold_path, portfolio_path, universe_path):
     path.parent.mkdir(parents=True, exist_ok=True)
     print(f"Written {path}")
 
-rows.write_parquet(args.buy_and_hold)
-metrics.write_parquet(args.output)
+rows.write_parquet(buy_and_hold_path)
 
-tables = {
-    "portfolio": portfolio_gt,
-    "portfolio_thresholds": thresholds_gt,
-    "portfolio_rarity": rarity_gt,
-    "portfolio_benchmarks": benchmarks_gt,
-    "portfolio_sweep": sweep_gt,
-    "portfolio_items": contributions_gt,
-}
+metrics.write_parquet(portfolio_path)
 
-write_outputs(tables, {"portfolio_value": value_figure}, args.tables, args.images, WIDE_TABLES)
+eligible.select("name").sort("name").write_parquet(universe_path)
+
+write_outputs(tables, charts, tables_path, images_path)

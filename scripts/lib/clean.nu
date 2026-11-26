@@ -1,18 +1,24 @@
-use ./constants.nu [PRICES_PATH]
-use ./helpers.nu [date-seasons fail winsorize-return]
-use ./output.nu [msg]
-use ./params.nu [load-params]
-use ./stats.nu [day-index]
+use ./helpers.nu [raise-error winsorize-return]
+use ./output.nu [print-message]
+use ./parameters.nu [load-parameters]
+use ./stats.nu [build-day-index]
 
-# Open one parquet table written by a data command.
-export def load-table [path: path, command: string] {
-    if not ($path | path exists) {
-        fail $"missing table ($path): run '($command)' first" $path --label "table"
-    }
+const CLEAN_PATH = (path self)
 
-    msg --level debug $"load table ($path)"
+# Check that every output exists and is newer than every input of the cleaning, including this script.
+export def check-outputs-current [outputs: list<path>, inputs: list<path>]: nothing -> bool {
+    if ($outputs | any {|path| not ($path | path exists) }) { return false }
 
-    polars open $path --eager
+    let built = $outputs | each {|path| ls $path | first | get modified } | sort | first
+    let changed = (
+        [...$inputs $CLEAN_PATH]
+        | where ($it | path exists)
+        | each {|path| ls $path | first | get modified }
+        | sort
+        | last
+    )
+
+    $changed <= $built
 }
 
 # Load the raw snapshots and concatenate them. One file needs no concatenation.
@@ -24,13 +30,8 @@ export def load-snapshots [files: list<path>]: nothing -> any {
     $frames | first | polars concat ...($frames | skip 1)
 }
 
-# Open the cleaned prices table.
-export def load-prices [path: path = $PRICES_PATH] {
-    load-table $path "data clean"
-}
-
 # Keep the positive daily prices. The daily price is the Steam 24-hour sale average.
-def positive-daily [raw]: nothing -> any {
+def filter-positive-daily [raw]: nothing -> any {
     let has_price = ((polars col price | polars is-not-null) and ((polars col price) > 0))
 
     $raw
@@ -40,7 +41,7 @@ def positive-daily [raw]: nothing -> any {
 }
 
 # Find the days with enough positive prices. A day below the share of the median day is a broken snapshot.
-def usable-days [daily, share: float]: nothing -> any {
+def find-usable-days [daily, share: float]: nothing -> any {
     let counts = (
         $daily
         | polars group-by date
@@ -64,18 +65,28 @@ def usable-days [daily, share: float]: nothing -> any {
     | polars with-column (polars lit true | polars as usable)
 }
 
-# Mark the days as training or testing.
+# Mark consecutive dates as training, validation, and testing.
 def add-periods []: any -> any {
     let days = $in
     let total = $days | polars into-nu | length
-    let params = (load-params)
+    let parameters = (load-parameters)
     let return_days = $total - 1
-    let training_days = $return_days * $params.clean.training_share | math floor
-    let training_end = 1 + $training_days
+    let training_share = $parameters.clean.training_share | into float
+    let validation_share = $parameters.clean.validation_share | into float
+
+    if $training_share <= 0 or $validation_share <= 0 or ($training_share + $validation_share) >= 1 {
+        raise-error "training and validation shares must be positive and leave testing dates" $parameters.clean --label "period shares"
+    }
+
+    let training_end = 1 + ($return_days * $training_share | math floor)
+    let validation_end = 1 + ($return_days * ($training_share + $validation_share) | math floor)
+    let is_training = ((polars col day_number) <= $training_end)
+    let is_validation = ((polars col day_number) <= $validation_end)
 
     $days
     | polars with-column (
-        polars when ((polars col day_number) <= $training_end) "training"
+        polars when $is_training "training"
+        | polars when $is_validation "validation"
         | polars otherwise "testing"
         | polars as period
     )
@@ -98,9 +109,9 @@ def select-assets [--min-mean-price: float, --min-observations: int]: any -> any
 }
 
 # Keep the daily prices inside the reference price bounds.
-def valid-daily-prices [selected, training]: any -> any {
+def filter-valid-daily-prices [selected, training]: any -> any {
     let daily = $in
-    let params = (load-params)
+    let parameters = (load-parameters)
 
     let reference = (
         $training
@@ -109,8 +120,8 @@ def valid-daily-prices [selected, training]: any -> any {
         | polars agg [(polars col price | polars median | polars as reference_price)]
     )
 
-    let min_multiple = $params.clean.min_price_multiple | into float
-    let max_multiple = $params.clean.max_price_multiple | into float
+    let min_multiple = $parameters.clean.min_price_multiple | into float
+    let max_multiple = $parameters.clean.max_price_multiple | into float
     let above_floor = (
         (polars col price) >= ((polars col reference_price) * $min_multiple)
     )
@@ -124,16 +135,16 @@ def valid-daily-prices [selected, training]: any -> any {
 }
 
 # Split the raw prices into the stages that the cleaning and the audit share. The daily price is `steam_24h`.
-export def clean-stages [
+export def build-clean-stages [
     raw
     --min-mean-price: float
     --min-observations: int
     --min-day-share: float
 ]: nothing -> record {
-    let params = (load-params)
-    let min_mean_price = $min_mean_price | default $params.clean.min_mean_price | into float
-    let min_observations = $min_observations | default $params.clean.min_observations | into int
-    let min_day_share = $min_day_share | default $params.clean.min_day_share | into float
+    let parameters = (load-parameters)
+    let min_mean_price = $min_mean_price | default $parameters.clean.min_mean_price | into float
+    let min_observations = $min_observations | default $parameters.clean.min_observations | into int
+    let min_day_share = $min_day_share | default $parameters.clean.min_day_share | into float
 
     let prices = (
         $raw
@@ -141,12 +152,17 @@ export def clean-stages [
         | polars rename [price steam_24h] [price_7d price]
     )
 
-    let usable = (usable-days (positive-daily $prices) $min_day_share)
-    let daily = (positive-daily $prices | polars join $usable date date --inner | polars select name date price)
-    let days = $daily | day-index
-    let periods = $days | add-periods
+    let usable = (find-usable-days (filter-positive-daily $prices) $min_day_share)
+    let daily = (
+        filter-positive-daily $prices
+        | polars join $usable date date --inner
+        | polars select name date price
+    )
 
+    let days = $daily | build-day-index
+    let periods = $days | add-periods
     let is_training = ((polars col period) == "training")
+
     let training = (
         $daily
         | polars join $periods date date --inner
@@ -158,20 +174,23 @@ export def clean-stages [
         | select-assets --min-mean-price $min_mean_price --min-observations $min_observations
     )
 
-    let valid = ($daily | valid-daily-prices $selected $training)
+    let valid = $daily | filter-valid-daily-prices $selected $training
 
     let is_valid = (
         $valid
         | polars select name date
         | polars with-column (polars lit true | polars as valid)
     )
+
     let is_selected = (
         $selected
         | polars select name
         | polars unique
         | polars with-column (polars lit true | polars as selected)
     )
+
     let is_positive = (polars col positive)
+
     let audit = (
         $prices
         | polars with-column (((polars col price | polars is-not-null)) and ((polars col price) > 0) | polars as positive)
@@ -201,17 +220,15 @@ export def clean-stages [
         min_mean_price: $min_mean_price
         min_observations: $min_observations
         daily: $daily
-        days: $days
         periods: $periods
         training: $training
-        selected: $selected
         valid: $valid
         audit: $audit
     }
 }
 
 # Keep the daily price of one source. A missing price stays out of the table.
-def source-prices [column: string]: any -> any {
+def filter-source-prices [column: string]: any -> any {
     let prices = $in
     let has_price = ((polars col $column) > 0)
 
@@ -251,7 +268,7 @@ def add-daily-return [max_gap: int, return_cap: float]: any -> any {
     $prices | polars join $returns [name date] [name date] --left
 }
 
-# Add the rarity, the period, and the sale season.
+# Add the rarity and the period.
 def attach-metadata [stages: record, items]: any -> any {
     let daily = $in
 
@@ -263,16 +280,7 @@ def attach-metadata [stages: record, items]: any -> any {
         }
     )
 
-    let seasons = (
-        ($stages.days | polars select date | polars collect | polars into-nu)
-        | date-seasons
-        | polars into-df
-        | polars with-column (polars col date | polars cast date | polars as date)
-        | polars collect
-    )
-
     $with_rarity
-    | polars join $seasons date date --left
     | polars join ($stages.periods | polars select date period) date date --left
     | polars select [
         name
@@ -282,7 +290,6 @@ def attach-metadata [stages: record, items]: any -> any {
         price
         return
         raw_return
-        sale_season
         price_7d
         composite_price
         buff_price
@@ -291,21 +298,21 @@ def attach-metadata [stages: record, items]: any -> any {
 }
 
 # Build the cleaned daily prices from the raw daily prices.
-export def cleaned-prices [
+export def build-cleaned-prices [
     stages: record
     --items: any = null
     --max-gap-days: int
     --return-cap: float
 ]: nothing -> any {
-    msg --level debug "clean: daily returns"
+    print-message --level debug "clean: daily returns"
 
-    let params = (load-params)
-    let max_gap = $max_gap_days | default $params.clean.max_gap_days | into int
-    let cap = $return_cap | default $params.clean.return_cap | into float
+    let parameters = (load-parameters)
+    let max_gap = $max_gap_days | default $parameters.clean.max_gap_days | into int
+    let cap = $return_cap | default $parameters.clean.return_cap | into float
 
-    let composite = ($stages.raw | source-prices composite_price | polars collect)
-    let buff = ($stages.raw | source-prices buff_price | polars collect)
-    let price_7d = ($stages.raw | source-prices price_7d | polars collect)
+    let composite = $stages.raw | filter-source-prices composite_price | polars collect
+    let buff = $stages.raw | filter-source-prices buff_price | polars collect
+    let price_7d = $stages.raw | filter-source-prices price_7d | polars collect
 
     let daily = (
         $stages.valid
@@ -316,13 +323,13 @@ export def cleaned-prices [
         | polars join $buff [name date] [name date] --left
     )
 
-    msg --level debug "clean: context"
+    print-message --level debug "clean: context"
 
     $daily | attach-metadata $stages $items
 }
 
 # Build one row per raw asset with its history and the selection result.
-export def asset-universe [stages: record]: nothing -> any {
+export def build-asset-universe [stages: record]: nothing -> any {
     let history = (
         $stages.daily
         | polars group-by name

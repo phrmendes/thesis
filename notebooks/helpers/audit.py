@@ -1,12 +1,12 @@
 import polars as pl
-from helpers.frames import record_frame
-from helpers.jumps import jump_rows
-from helpers.params import load_params
+from helpers.frames import build_record_frame
+from helpers.jumps import find_jump_rows
+from helpers.parameters import parameters
 
-CHEAP_PRICE = 1.0
+CHEAP_PRICE = parameters().data_quality.cheap_price
 
 
-def longest_unchanged_runs(valid: pl.DataFrame) -> pl.DataFrame:
+def find_longest_unchanged_runs(valid: pl.DataFrame) -> pl.DataFrame:
     """Find the longest run of identical daily prices of each asset.
 
     Returns:
@@ -19,7 +19,7 @@ def longest_unchanged_runs(valid: pl.DataFrame) -> pl.DataFrame:
     return runs.group_by("name").agg(pl.col("length").max().alias("longest_run"))
 
 
-def unchanged_daily_share(valid: pl.DataFrame) -> float:
+def calculate_unchanged_daily_share(valid: pl.DataFrame) -> float:
     """Find the share of daily prices equal to the previous observed daily price.
 
     Returns:
@@ -32,7 +32,7 @@ def unchanged_daily_share(valid: pl.DataFrame) -> float:
     return ordered.select((change == 0).mean()).item()
 
 
-def audit_row_counts(rows: pl.DataFrame) -> pl.DataFrame:
+def count_audit_rows(rows: pl.DataFrame) -> pl.DataFrame:
     """Count the raw, daily, selected, and valid rows and assets.
 
     Returns:
@@ -44,7 +44,7 @@ def audit_row_counts(rows: pl.DataFrame) -> pl.DataFrame:
     selected = rows.filter(pl.col("selected"))
     valid = rows.filter(pl.col("valid"))
 
-    return record_frame(
+    return build_record_frame(
         {
             "raw_rows": rows.height,
             "raw_assets": rows["name"].n_unique(),
@@ -68,20 +68,20 @@ def audit_stale_prices(valid: pl.DataFrame) -> pl.DataFrame:
         One row with the unchanged share, the longest run, and the count of assets over the run limit.
 
     """
-    max_days = load_params()["clean"]["max_unchanged_days"]
+    max_days = parameters().clean.max_unchanged_days
     longest_run = pl.col("longest_run")
 
-    runs = longest_unchanged_runs(valid).select(
+    runs = find_longest_unchanged_runs(valid).select(
         longest_run.max().alias("longest_unchanged_run"),
         (longest_run > max_days).sum().alias(f"assets_with_run_over_{max_days}_days"),
     )
 
-    share = record_frame({"unchanged_daily_share": unchanged_daily_share(valid)})
+    share = build_record_frame({"unchanged_daily_share": calculate_unchanged_daily_share(valid)})
 
     return pl.concat([share, runs], how="horizontal_extend")
 
 
-def audit_daily_shares(prices: pl.DataFrame) -> pl.DataFrame:
+def calculate_audit_daily_shares(prices: pl.DataFrame) -> pl.DataFrame:
     """Measure the share of cleaned rows with each kind of value.
 
     Returns:
@@ -89,7 +89,7 @@ def audit_daily_shares(prices: pl.DataFrame) -> pl.DataFrame:
 
     """
     returns = pl.col("return")
-    cap = load_params()["clean"]["return_cap"]
+    cap = parameters().clean.return_cap
 
     return prices.select(
         returns.is_null().mean().alias("rows_without_return_share"),
@@ -101,23 +101,21 @@ def audit_daily_shares(prices: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-def audit_metrics(rows: pl.DataFrame, prices: pl.DataFrame) -> pl.DataFrame:
+def calculate_audit_metrics(rows: pl.DataFrame, prices: pl.DataFrame) -> pl.DataFrame:
     """Calculate the cleaning diagnostics from the stage-tagged raw rows.
 
     Returns:
         One row with the cleaning diagnostics.
 
     """
-    daily = rows.filter(pl.col("positive") & pl.col("usable"))
     valid = rows.filter(pl.col("valid"))
-    mean_prices = prices.group_by("name").agg(pl.col("price").mean().alias("mean_price"))
 
-    jumps = jump_rows(prices).select(
+    jumps = find_jump_rows(prices).select(
         pl.len().alias("daily_jumps"),
         pl.col("reversed").sum().alias("reversed_jumps"),
     )
 
-    price_dates = daily.select(
+    price_dates = rows.filter(pl.col("positive") & pl.col("usable")).select(
         pl.col("date").min().alias("first_price_day"),
         pl.col("date").max().alias("last_price_day"),
     )
@@ -127,13 +125,17 @@ def audit_metrics(rows: pl.DataFrame, prices: pl.DataFrame) -> pl.DataFrame:
         pl.col("name").n_unique().alias("cleaned_assets"),
     )
 
-    cheap_assets = mean_prices.select((pl.col("mean_price") < CHEAP_PRICE).sum().alias("assets_below_one"))
+    cheap_assets = (
+        prices.group_by("name")
+        .agg(pl.col("price").mean().alias("mean_price"))
+        .select((pl.col("mean_price") < CHEAP_PRICE).sum().alias("assets_below_one"))
+    )
 
     return pl.concat(
         [
-            audit_row_counts(rows),
+            count_audit_rows(rows),
             audit_stale_prices(valid),
-            audit_daily_shares(prices),
+            calculate_audit_daily_shares(prices),
             cleaned_facts,
             jumps,
             price_dates,

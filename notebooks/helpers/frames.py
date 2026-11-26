@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from datetime import date
 
 
-def record_frame(record: dict[str, float | date | None]) -> pl.DataFrame:
+def build_record_frame(record: dict[str, float | date | None]) -> pl.DataFrame:
     """Build a one-row frame whose columns keep the raw value types.
 
     Returns:
@@ -16,7 +16,7 @@ def record_frame(record: dict[str, float | date | None]) -> pl.DataFrame:
     return pl.DataFrame({name: [value] for name, value in record.items()})
 
 
-def bucket_label(column: str, breaks: tuple[float, ...], labels: tuple[str, ...]) -> pl.Expr:
+def build_bucket_label(column: str, breaks: tuple[float, ...], labels: tuple[str, ...]) -> pl.Expr:
     """Label each value of one column with the bucket that holds it.
 
     Returns:
@@ -26,7 +26,7 @@ def bucket_label(column: str, breaks: tuple[float, ...], labels: tuple[str, ...]
     return pl.col(column).cut(list(breaks), labels=list(labels))
 
 
-def with_empty_buckets(counts: pl.DataFrame, key: str, labels: tuple[str, ...]) -> pl.DataFrame:
+def add_empty_buckets(counts: pl.DataFrame, key: str, labels: tuple[str, ...]) -> pl.DataFrame:
     """Add a zero row for each bucket that has no count, in the bucket order.
 
     Returns:

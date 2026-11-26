@@ -1,125 +1,161 @@
 # %% [markdown]
-# # Sensibilidade dos resultados às escolhas de limpeza e de carteira
+# # Sensibilidade dos resultados à limpeza, ao calendário e à carteira
 #
-# Os limites de limpeza, o tamanho da lacuna aceita entre dois preços, o teto do retorno, a janela dos
-# preços de entrada e saída e o calendário das promoções são escolhas do autor. Cada linha abaixo refaz
-# o cálculo com uma escolha diferente. Se os resultados mudam pouco, as conclusões não dependem delas.
+# A análise de sensibilidade repete os cálculos com diferentes filtros de limpeza, intervalos entre preços e
+# limites de retorno.
+#
+# Também altera o calendário das promoções e a forma de calcular os preços de entrada e saída. A comparação
+# mostra quais resultados permanecem semelhantes nas alternativas avaliadas.
+# O tamanho da carteira vem do resumo do buy-and-hold, que deve existir antes desta análise.
 
-# %%
-from argparse import ArgumentParser
-from pathlib import Path
-
+# %% jupyter={"source_hidden": true}
 import polars as pl
-from great_tables import GT
-from helpers.export import inline_table_styles, write_outputs
-from helpers.formatting import DEC_MARK, SEP_MARK
-from helpers.params import load_params
-from helpers.paths import repo
-from helpers.runtime import notebook_arguments
+from great_tables import GT, md
+from great_tables.vals import fmt_integer
+from helpers.export import enable_inline_table_styles, write_outputs
+from helpers.formatting import LOCALE, TABLE_SOURCE
+from helpers.parameters import parameters
+from helpers.paths import get_repo_root
 from helpers.schemas import read_table
-from helpers.sensitivity import sensitivity_row
+from helpers.sensitivity import build_sensitivity_row
 
-# %%
-# GitHub drops style blocks, so the tables keep their styles inline.
-inline_table_styles()
+enable_inline_table_styles()
+
+notebook_parameters = parameters().sensitivity
+
+paths = parameters().paths
+
+tables_path = get_repo_root() / paths.tables
+
+portfolio_path = get_repo_root() / paths.portfolio
+
+sensitivity_path = get_repo_root() / paths.sensitivity
+
+selected_k = int(read_table("portfolio", portfolio_path)["assets"].item())
+
+tables: dict[str, GT] = {}
+
+PRICE_WINDOW_NAME = f"price_window_{notebook_parameters.price_window_days}"
+
+SHIFT_LABELS = {
+    shift: pl.select(fmt_integer(pl.lit(shift), force_sign=True, locale=LOCALE)).item()
+    for shift in notebook_parameters.sale_shifts
+}
 
 VARIANT_LABELS = {
-    "baseline": "Base",
-    "day_share_0.3": "Dia aproveitado com 30% da mediana",
-    "day_share_0.7": "Dia aproveitado com 70% da mediana",
-    "observations_100": "Mínimo de 100 dias de treino (inclui itens mais novos)",
-    "observations_200": "Mínimo de 200 dias de treino",
-    "observations_500": "Mínimo de 500 dias de treino",
-    "gap_3": "Retorno entre preços a até 3 dias",
-    "cap_1.0": "Teto do retorno em 100%",
-    "cap_2.0": "Teto do retorno em 200%",
-    "cap_10.0": "Teto do retorno em 1.000%",
-    "sale_shift_-1": "Calendário das promoções um dia antes",
-    "sale_shift_1": "Calendário das promoções um dia depois",
-    "price_window_1": "Preço de entrada e saída sem suavização",
+    **{variant.name: variant.label for variant in parameters().sensitivity_variants},
+    **{f"sale_shift_{shift}": f"Deslocamento do calendário (dias): {label}" for shift, label in SHIFT_LABELS.items()},
+    PRICE_WINDOW_NAME: f"Janela de preços (observações): {notebook_parameters.price_window_days}",
 }
 
-# %% [markdown]
-# ## Argumentos da linha de comando
-
-# %%
-parser = ArgumentParser(description="Sensibilidade: resume cada variante da limpeza.")
-parser.add_argument(
-    "--directory",
-    type=Path,
-    default=repo() / "files/sensitivity",
-    help="Pasta com a tabela limpa de cada variante.",
-)
-parser.add_argument("--k", type=int, default=10, help="Número de itens da carteira.")
-parser.add_argument("--tables", type=Path, default=repo() / "output/tables", help="Pasta para os arquivos das tabelas.")
-args = parser.parse_args(notebook_arguments())
-
-# %% [markdown]
-# ## Refazer os resultados em cada variante da limpeza
-#
-# Cada variante usa uma tabela limpa com uma escolha diferente. A tabela mostra o número de itens, o
-# retorno diário composto do mercado, os coeficientes da primeira metade da promoção e do pós-venda, e o
-# ROI da carteira.
-
-# %%
 variant_prices = {
-    variant["name"]: read_table("prices", args.directory / f"{variant['name']}.parquet")
-    for variant in load_params()["sensitivity"]["variants"]
+    variant.name: read_table("prices", sensitivity_path / f"{variant.name}.parquet")
+    for variant in parameters().sensitivity_variants
 }
 
-cleaning_rows = [sensitivity_row(prices, name, args.k) for name, prices in variant_prices.items()]
-
-# %% [markdown]
-# ## Mover o calendário das promoções e a janela de preços
-#
-# O instante do instantâneo diário não é conhecido. Mover o calendário em um dia para cada lado mostra se
-# o resultado das promoções depende desse instante. A janela de preços usa a base, com a mediana trocada
-# pelo último preço.
-
-# %%
 baseline = variant_prices["baseline"]
 
-shift_rows = [sensitivity_row(baseline, f"sale_shift_{shift}", args.k, shift_days=shift) for shift in (-1, 1)]
-window_rows = [sensitivity_row(baseline, "price_window_1", args.k, window=1)]
-summary = pl.concat([*cleaning_rows, *shift_rows, *window_rows])
-
 # %% [markdown]
-# ## Construir a tabela da tese
+# ## Resultados sob diferentes critérios de limpeza
+#
+# Cada alternativa usa uma tabela de preços preparada com um critério diferente. A comparação inclui o número
+# de itens, o retorno do mercado, os coeficientes das fases e o ROI da carteira.
 
 # %%
-summary_text = summary.with_columns(pl.col("variant").replace_strict(VARIANT_LABELS, return_dtype=pl.String))
+cleaning_rows = [build_sensitivity_row(prices, name, selected_k) for name, prices in variant_prices.items()]
 
-summary_gt = (
-    GT(summary_text)
+# %% [markdown]
+# ## Resultados com outras datas de promoção e preços de referência
+#
+# A fonte não informa o horário exato da coleta diária. A análise desloca o calendário das promoções em um dia
+# para cada lado para verificar a sensibilidade a essa definição.
+#
+# Outra alternativa altera o número de preços observados que compõem a mediana.
+
+# %%
+shift_rows = [
+    build_sensitivity_row(baseline, f"sale_shift_{shift}", selected_k, shift_days=shift)
+    for shift in notebook_parameters.sale_shifts
+]
+
+window_rows = [
+    build_sensitivity_row(baseline, PRICE_WINDOW_NAME, selected_k, window=notebook_parameters.price_window_days)
+]
+
+# %% [markdown]
+# ## Resultados de todas as alternativas
+#
+# A tabela reúne os resultados das alternativas de limpeza, calendário e preços de referência.
+#
+# O modelo usa $y_t$ para o retorno diário do mercado com ponderação igual na data $t$.
+# As variáveis $x_{t1}, \ldots, x_{t5}$ indicam, nessa ordem, a pré-promoção, a primeira metade, a segunda metade,
+# a pós-promoção e a virada do ano. Cada variável vale 1 na condição correspondente e 0 nos demais dias.
+# A constante é $\beta_0$, os coeficientes das indicadoras são $\beta_1, \ldots, \beta_5$ e $u_t$ representa o erro.
+#
+# $$
+# y_t = \beta_0 + \beta_1 x_{t1} + \cdots + \beta_5 x_{t5} + u_t.
+# $$
+#
+# A análise estima a equação por mínimos quadrados ordinários, com erros-padrão HAC de Newey-West.
+# Cada regressão usa a série diária de toda a amostra da alternativa.
+# Os coeficientes descrevem associações em relação aos dias fora das fases de promoção, com controle para a
+# virada do ano. A tabela apresenta $\beta_2$ e $\beta_4$ com seus p-valores.
+#
+# O retorno composto do mercado é uma medida descritiva.
+# O ROI da carteira vem da simulação buy-and-hold no período de teste, não da regressão.
+
+# %%
+summary = pl.concat([*cleaning_rows, *shift_rows, *window_rows]).with_columns(
+    pl.col("variant").replace_strict(VARIANT_LABELS, return_dtype=pl.String)
+)
+
+tables["sensitivity"] = (
+    GT(summary, locale=LOCALE)
+    .tab_options(table_font_size="6pt")
+    .tab_source_note(TABLE_SOURCE)
+    .tab_source_note("Coeficientes do retorno diário do mercado com ponderação igual, como na tabela de fases.")
     .cols_align("left", columns="variant")
-    .tab_header(title="Sensibilidade dos Resultados — CS:GO")
-    .fmt_integer(columns=["items"], sep_mark=SEP_MARK)
+    .fmt_integer(columns=["items"])
     .fmt_percent(
-        columns=["market_geometric_return", "fh_coefficient", "post_coefficient", "portfolio_roi"],
+        columns=["geometric_return", "fh_coefficient", "post_coefficient", "portfolio_roi"],
         decimals=2,
-        sep_mark=SEP_MARK,
-        dec_mark=DEC_MARK,
     )
-    .fmt_number(columns=["fh_p_value", "post_p_value"], decimals=3, sep_mark=SEP_MARK, dec_mark=DEC_MARK)
+    .fmt_number(columns=["fh_p_value", "post_p_value"], decimals=3)
+    .sub_missing(columns="portfolio_roi", missing_text="Inviável")
+    .tab_spanner(label=md("**1ª metade**"), columns=["fh_coefficient", "fh_p_value"])
+    .tab_spanner(label=md("**Pós-promoção**"), columns=["post_coefficient", "post_p_value"])
     .cols_label(
-        variant="Variante",
-        items="Itens",
-        market_geometric_return="Retorno composto do mercado",
-        fh_coefficient="1ª metade: coef.",
-        fh_p_value="1ª metade: p",
-        post_coefficient="Pós-venda: coef.",
-        post_p_value="Pós-venda: p",
-        portfolio_roi="ROI da carteira",
+        variant=md("**Variante**"),
+        items=md("**Itens**"),
+        geometric_return=md("**Retorno composto**"),
+        fh_coefficient=md("**Coef.**"),
+        fh_p_value=md("**p**"),
+        post_coefficient=md("**Coef.**"),
+        post_p_value=md("**p**"),
+        portfolio_roi=md("**ROI da carteira** (3)"),
     )
     .tab_source_note(
-        "Coeficientes do retorno diário do mercado com peso igual, como na tabela de fases. "
-        f"ROI líquido da carteira com {args.k} itens ordenados pelo ROI de treino."
+        "(1) Cobertura mínima: parcela mínima da mediana diária de preços positivos que o dia precisa atingir."
+    )
+    .tab_source_note("(2) Mínimo de dias com preço no período de treinamento para o item entrar na amostra.")
+    .tab_source_note(
+        f"(3) ROI líquido com o tamanho comum de {selected_k} itens, "
+        "em ordem decrescente do ROI no histórico de seleção. "
+        f"Inviável quando menos de {selected_k} itens atendem aos critérios."
     )
 )
-summary_gt
 
 # %% [markdown]
-# ## Exportar a tabela LaTeX
+# **Sensibilidade dos resultados — CS:GO**
 
-# %%
-write_outputs({"sensitivity": summary_gt}, {}, args.tables, wide=frozenset({"sensitivity"}))
+# %% jupyter={"source_hidden": true}
+tables["sensitivity"]
+
+# %% [markdown]
+# A associação negativa na primeira metade permanece significativa a 5% em todas as alternativas.
+# Na pós-promoção, o sinal permanece positivo, mas a significância a 5% depende da alternativa.
+# O ROI depende dos filtros e da janela de preços, e a exigência máxima de histórico inviabiliza a carteira
+# de tamanho fixo.
+
+# %% jupyter={"source_hidden": true, "outputs_hidden": true}
+write_outputs(tables, {}, tables_path)

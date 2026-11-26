@@ -2,7 +2,7 @@ from os import environ
 from pathlib import Path
 
 
-def repo() -> Path:
+def get_repo_root() -> Path:
     """Read the project root that devenv sets.
 
     Returns:

@@ -1,0 +1,76 @@
+[paths]
+prices = "files/prices.parquet"
+assets = "files/assets.parquet"
+audit = "files/audit.parquet"
+buy_and_hold = "files/buy_and_hold.parquet"
+portfolio = "files/portfolio.parquet"
+portfolio_universe = "files/portfolio_universe.parquet"
+sensitivity = "files/sensitivity"
+tables = "output/tables"
+images = "output/images"
+
+[clean]
+return_cap = 5.0  # Clip daily returns symmetrically in decimal units.
+training_share = 0.5  # Use dates after the first price date.
+validation_share = 0.2  # Reserve the next dates for validation; testing uses the remainder.
+min_price_multiple = 0.05  # Compare with the item's training median.
+max_price_multiple = 20.0  # Compare with the item's training median.
+min_mean_price = 1.0  # Use the training mean in US dollars.
+min_observations = 30  # Count observed training prices.
+min_day_share = 0.5  # Compare daily positive-price counts with the sample median.
+max_gap_days = 1  # Count calendar days between observed prices.
+max_unchanged_days = 28  # Audit only. Count observed dates, not calendar days.
+
+[[sensitivity_variants]]
+name = "baseline"  # Use the main cleaning settings unchanged.
+label = "Base"
+
+[[sensitivity_variants]]
+name = "day_share_0.3"
+label = "Cobertura mínima de 30% (1)"
+min_day_share = 0.3
+
+[[sensitivity_variants]]
+name = "day_share_0.7"
+label = "Cobertura mínima de 70% (1)"
+min_day_share = 0.7
+
+[[sensitivity_variants]]
+name = "observations_100"
+label = "Mínimo de 100 dias (2)"
+min_observations = 100
+
+[[sensitivity_variants]]
+name = "observations_200"
+label = "Mínimo de 200 dias (2)"
+min_observations = 200
+
+[[sensitivity_variants]]
+name = "observations_350"
+label = "Mínimo de 350 dias (2)"
+min_observations = 350
+
+[[sensitivity_variants]]
+name = "observations_500"
+label = "Mínimo de 500 dias (2)"
+min_observations = 500
+
+[[sensitivity_variants]]
+name = "gap_3"
+label = "Intervalo máximo de 3 dias"
+max_gap_days = 3
+
+[[sensitivity_variants]]
+name = "cap_1.0"
+label = "Teto do retorno em 100%"
+return_cap = 1.0
+
+[[sensitivity_variants]]
+name = "cap_2.0"
+label = "Teto do retorno em 200%"
+return_cap = 2.0
+
+[[sensitivity_variants]]
+name = "cap_10.0"
+label = "Teto do retorno em 1.000%"
+return_cap = 10.0

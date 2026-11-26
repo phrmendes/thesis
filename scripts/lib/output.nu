@@ -2,29 +2,22 @@ const DEFAULT_LOG_FILE = "/tmp/thesis/log.txt"
 const BAR_WIDTH = 30
 
 # Return whether the output uses color and symbols.
-def color-enabled []: nothing -> bool {
+def check-color-enabled []: nothing -> bool {
     if not (is-terminal --stderr) { return false }
 
     ($env.NO_COLOR? == null)
 }
 
 # Format one line without color or symbol.
-def format-plain [level: string, text: string]: nothing -> string {
+def format-plain-line [level: string, text: string]: nothing -> string {
     if $level == "warn" { return $"warning: ($text)" }
 
     $text
 }
 
-# Format one line. `plain` leaves out the color and the symbol.
-export def format-line [
-    level: string
-    text: string
-    --plain
-    --color
-]: nothing -> string {
-    if $plain { return (format-plain $level $text) }
-
-    if (not $color) and (not (color-enabled)) { return (format-plain $level $text) }
+# Format one line with color and a symbol when stderr supports them.
+def format-line [level: string, text: string]: nothing -> string {
+    if not (check-color-enabled) { return (format-plain-line $level $text) }
 
     match $level {
         done => $"(ansi green)✓(ansi reset) ($text)"
@@ -35,7 +28,7 @@ export def format-line [
 }
 
 # Append one message to the debug log as a JSON line. Do nothing when debug is off.
-export def debug-line [text: string]: nothing -> nothing {
+def write-debug-line [text: string]: nothing -> nothing {
     if ($env.THESIS_DEBUG? | default "false") != "true" { return }
 
     let path = $env.THESIS_LOG_FILE? | default $DEFAULT_LOG_FILE
@@ -55,9 +48,9 @@ export def debug-line [text: string]: nothing -> nothing {
 }
 
 # Print one human-readable message on stderr.
-export def msg [text: string, --level: string = "info"]: nothing -> nothing {
+export def print-message [text: string, --level: string = "info"]: nothing -> nothing {
     if $level == "debug" {
-        debug-line $text
+        write-debug-line $text
 
         return
     }
@@ -66,7 +59,7 @@ export def msg [text: string, --level: string = "info"]: nothing -> nothing {
 }
 
 # Turn the debug log on or off for the current command. An enabled run starts with an empty log file and prints its path.
-export def --env debug-mode [enabled: bool]: nothing -> nothing {
+export def --env set-debug-mode [enabled: bool]: nothing -> nothing {
     $env.THESIS_DEBUG = ($enabled | into string)
 
     if not $enabled { return }
@@ -77,11 +70,11 @@ export def --env debug-mode [enabled: bool]: nothing -> nothing {
 
     "" | save --force $path
 
-    msg $"Debug log: ($path)"
+    print-message $"Debug log: ($path)"
 }
 
 # Return one progress bar without the numbers.
-export def bar-text [done: int, total: int]: nothing -> string {
+def build-bar-text [done: int, total: int]: nothing -> string {
     if $total <= 0 { return ("" | fill --width $BAR_WIDTH --character "█") }
 
     let ratio = ([
@@ -96,11 +89,11 @@ export def bar-text [done: int, total: int]: nothing -> string {
 }
 
 # Draw the progress of a long step. Redraw one line on a terminal and print one line per tenth otherwise.
-export def progress [done: int, total: int, --label: string = ""]: nothing -> nothing {
+export def show-progress [done: int, total: int, --label: string = ""]: nothing -> nothing {
     let line = $"[($done)/($total)] ($label)"
 
     if not (is-terminal --stderr) {
-        if $done == 0 { msg $line }
+        if $done == 0 { print-message $line }
 
         return
     }
@@ -109,11 +102,11 @@ export def progress [done: int, total: int, --label: string = ""]: nothing -> no
     let percent = ($ratio * 100 | math round | into int)
     let suffix = (if $done >= $total { "\n" } else { "" })
 
-    print --stderr --no-newline $"\r[($done)/($total)] (bar-text $done $total) ($percent)% ($label)($suffix)"
+    print --stderr --no-newline $"\r[($done)/($total)] (build-bar-text $done $total) ($percent)% ($label)($suffix)"
 }
 
 # Run one action and print its duration. The action receives the pipeline input.
-export def timed [
+export def run-timed [
     label: string
     action: closure
     --step: int
@@ -125,9 +118,9 @@ export def timed [
     let seconds = $elapsed / 1sec | math round --precision 1
     let counter = (if $step == null or $of == null { "" } else { $"[($step)/($of)] " })
 
-    msg --level done $"($counter)($label) ($seconds)s"
+    print-message --level done $"($counter)($label) ($seconds)s"
 
-    debug-line $"($label): ($elapsed)"
+    write-debug-line $"($label): ($elapsed)"
 
     $result
 }

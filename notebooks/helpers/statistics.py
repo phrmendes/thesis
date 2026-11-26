@@ -1,10 +1,20 @@
+from math import floor
+
 import polars as pl
-from numpy import asarray
-from statsmodels.stats.diagnostic import het_arch
-from statsmodels.tsa.stattools import acf, adfuller
+from statsmodels.tsa.stattools import acf
 
 
-def ratio(numerator: pl.Expr, denominator: pl.Expr) -> pl.Expr:
+def calculate_hac_lags(observations: int) -> int:
+    """Choose the Newey-West bandwidth with the rule reported by Wooldridge, section 12.5.
+
+    Returns:
+        The bandwidth `floor(4 * (observations / 100) ** (2 / 9))`.
+
+    """
+    return floor(4 * (observations / 100) ** (2 / 9))
+
+
+def calculate_ratio(numerator: pl.Expr, denominator: pl.Expr) -> pl.Expr:
     """Divide two expressions, or return null when the denominator is not positive.
 
     Returns:
@@ -14,7 +24,7 @@ def ratio(numerator: pl.Expr, denominator: pl.Expr) -> pl.Expr:
     return pl.when(denominator > 0).then(numerator / denominator)
 
 
-def autocorrelations(values: list[float], max_lag: int) -> list[float]:
+def calculate_autocorrelations(values: list[float], max_lag: int) -> list[float]:
     """Calculate the autocorrelation of a series at each lag from one to the maximum.
 
     Returns:
@@ -24,31 +34,7 @@ def autocorrelations(values: list[float], max_lag: int) -> list[float]:
     return list(acf(values, nlags=max_lag)[1:])
 
 
-def adf_test(values: list[float], max_lag: int | None = None) -> tuple[float, float]:
-    """Run an augmented Dickey-Fuller test.
-
-    Returns:
-        The test statistic and its p-value.
-
-    """
-    statistic, p_value, *_ = adfuller(values, maxlag=max_lag, autolag="AIC")
-
-    return float(statistic), float(p_value)
-
-
-def arch_test(values: list[float], lags: int) -> tuple[float, float]:
-    """Run an ARCH-LM test for volatility clustering.
-
-    Returns:
-        The LM statistic and its p-value.
-
-    """
-    statistic, p_value, *_ = het_arch(asarray(values), nlags=lags)
-
-    return float(statistic), float(p_value)
-
-
-def column_min(column: str) -> pl.Expr:
+def get_column_min(column: str) -> pl.Expr:
     """Take the minimum of a float column.
 
     The Polars `min` kernel returns a wrong value for float columns of 16 rows or more in this environment.
@@ -61,7 +47,7 @@ def column_min(column: str) -> pl.Expr:
     return pl.col(column).quantile(0.0, interpolation="lower").alias(column)
 
 
-def column_max(column: str) -> pl.Expr:
+def get_column_max(column: str) -> pl.Expr:
     """Take the maximum of a float column. See `column_min`.
 
     Returns:
